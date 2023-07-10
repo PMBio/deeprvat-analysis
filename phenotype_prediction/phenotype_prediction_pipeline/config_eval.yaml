@@ -1,0 +1,62 @@
+phenotypes:
+  - Apolipoprotein_A
+  - Apolipoprotein_B
+  - Calcium
+  - Cholesterol
+  - HDL_cholesterol
+  - IGF_1
+  - LDL_direct
+  - SHBG
+  - Total_bilirubin
+  - Triglycerides
+  - Urate
+  - Standing_height
+  - Lymphocyte_percentage
+  - Mean_platelet_thrombocyte_volume
+  - Mean_corpuscular_volume
+  - Mean_reticulocyte_volume
+  - Neutrophill_count
+  - Platelet_count
+  - Platelet_crit
+  - Platelet_distribution_width
+  - Red_blood_cell_erythrocyte_count
+cv_splits: 5
+######################### significant genes ############
+
+
+gene_file: genes.parquet
+
+
+
+######################### data preparation ############
+prs_pheno_map: prs_pheno_map.csv
+prs_file: PRS.parquet #should have sample ID as index and PGS{ID} as column names
+phenotype_file: phenotypes.parquet
+
+data_prep_fdrs:
+    - 0.05
+
+
+
+regression:
+    fdrs:
+        - 0.05
+    top_quantiles:
+        - 0.001
+        - 0.01
+        - 0.1
+    pheno_suffixes:
+        - qt
+    r_config:
+        vtypes:
+            - plof
+            - cadd
+            - polyphen
+            - sift
+            - primateai
+            - splicai
+        n_deeprvat_repeats: 6
+        n_cv_splits: 5
+        gene_lists: 
+            - deeprvat_discoveries
+            - baseline_only

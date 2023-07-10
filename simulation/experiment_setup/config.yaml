@@ -1,0 +1,328 @@
+debug: False
+n_sim_repeats: 5
+association_testing_maf: 0.001 ####### Change this!!!!! 0.01, 0.001, 0.0001
+#will update rare_maf for baseline  --> changes thresholds: UKB_AF and min_common_AF, 
+#also changes UKB_AF and min_common_AF for DeepRVAT association data set
+####################################### baseline #######################################
+
+baseline:
+  debug: False
+  alpha: 0.05
+  # use_sim_causal_variants_only: True
+  data:
+    dataloader_config:
+      num_workers: 10
+    dataset_config:
+      variant_file: variants.parquet
+      annotation_file: annotations.parquet
+      annotations: &id001
+        - UKB_AF
+        - is_plof
+        - Consequence_missense_variant
+      gene_file: genes.parquet
+      min_common_af:
+        UKB_AF: 0.01
+      phenotype_file: phenotypes.parquet
+      rare_embedding:
+        config:
+          annotations: *id001
+          gene_file: genes.parquet
+          low_memory: false
+          thresholds:
+            UKB_AF: UKB_AF < 0.01 and UKB_AF > 0
+          verbose: true
+        type: SparseGenotype
+      use_common_variants: false
+      use_rare_variants: true
+      verbose: true
+      x_phenotypes: &id002
+        - sim_cov_1
+        - sim_cov_2
+    gt_file: genotypes.h5
+  phenotypes:
+    - sim_phenotype
+  rare_maf: 0.01
+  test_config:
+    center_genotype: false
+    collapse_method: sum
+    neglect_homozygous: true
+    var_weight_function: beta_maf
+  test_types:
+    - burden
+    - skat
+  train_proportion: 1.0
+  variant_file: variants.parquet
+  variant_types:
+    - missense
+    - plof
+####################################### DEEPRVAT #######################################
+deeprvat:
+  debug: False
+  n_repeats: 6
+  phenotypes:
+    - sim_phenotype
+  ##### deeprvat training data ######
+  training_data:
+    dataloader_config:
+      batch_size: 64
+      num_workers: 6
+    dataset_config:
+      annotation_file: annotations.parquet
+      annotations: 
+          - UKB_AF
+          - UKB_AF_MB
+          - is_plof
+          - Consequence_splice_acceptor_variant
+          - Consequence_splice_donor_variant
+          - Consequence_stop_gained
+          - Consequence_frameshift_variant
+          - Consequence_stop_lost
+          - Consequence_start_lost
+          - Consequence_inframe_insertion
+          - Consequence_inframe_deletion
+          - Consequence_missense_variant
+          - Consequence_protein_altering_variant
+          - Consequence_splice_region_variant
+          - sift_score
+          - polyphen_score
+          - condel_score
+          - PrimateAI_score
+          - CADD_raw
+          - AbSplice_DNA
+      gene_file: genes.parquet
+      min_common_af:
+        UKB_AF: 0.01
+      phenotype_file: phenotypes.parquet
+      rare_embedding:
+        config:
+          annotations:
+            - UKB_AF_MB
+            - is_plof
+            - Consequence_splice_acceptor_variant
+            - Consequence_splice_donor_variant
+            - Consequence_stop_gained
+            - Consequence_frameshift_variant
+            - Consequence_stop_lost
+            - Consequence_start_lost
+            - Consequence_inframe_insertion
+            - Consequence_inframe_deletion
+            - Consequence_missense_variant
+            - Consequence_protein_altering_variant
+            - Consequence_splice_region_variant
+            - sift_score
+            - polyphen_score
+            - condel_score
+            - PrimateAI_score
+            - CADD_raw
+            - AbSplice_DNA
+          gene_file: genes.parquet
+          low_memory: true
+          thresholds:
+            UKB_AF: UKB_AF < 0.01 and UKB_AF > 0
+          verbose: true
+        type: PaddedAnnotations
+      use_common_variants: false
+      use_rare_variants: true
+      verbose: true
+      x_phenotypes: *id002
+    gt_file: genotypes.h5
+    variant_file: variants.parquet
+  
+  ##### deeprvat association data ######
+  data:
+    dataloader_config:
+      batch_size: 8
+      num_workers: 10
+    dataset_config:
+      annotation_file: annotations.parquet
+      annotations:
+          - UKB_AF
+          - UKB_AF_MB
+          # - CADD_PHRED
+          - is_plof
+          - Consequence_splice_acceptor_variant
+          - Consequence_splice_donor_variant
+          - Consequence_stop_gained
+          - Consequence_frameshift_variant
+          - Consequence_stop_lost
+          - Consequence_start_lost
+          - Consequence_inframe_insertion
+          - Consequence_inframe_deletion
+          - Consequence_missense_variant
+          - Consequence_protein_altering_variant
+          - Consequence_splice_region_variant
+          - sift_score
+          - polyphen_score
+          - condel_score
+          - PrimateAI_score
+          - CADD_raw
+          - AbSplice_DNA
+      gene_file: genes.parquet
+      min_common_af:
+        UKB_AF: 0.001
+      phenotype_file: phenotypes.parquet
+      rare_embedding:
+        config:
+          annotations:
+            - UKB_AF_MB
+            - is_plof
+            - Consequence_splice_acceptor_variant
+            - Consequence_splice_donor_variant
+            - Consequence_stop_gained
+            - Consequence_frameshift_variant
+            - Consequence_stop_lost
+            - Consequence_start_lost
+            - Consequence_inframe_insertion
+            - Consequence_inframe_deletion
+            - Consequence_missense_variant
+            - Consequence_protein_altering_variant
+            - Consequence_splice_region_variant
+            - sift_score
+            - polyphen_score
+            - condel_score
+            - PrimateAI_score
+            - CADD_raw
+            - AbSplice_DNA
+          gene_file: genes.parquet
+          low_memory: true
+          thresholds:
+            UKB_AF: UKB_AF < 0.001 and UKB_AF > 0
+            # CADD_PHRED:  "CADD_PHRED > 5"
+          verbose: true
+        type: PaddedAnnotations
+      use_common_variants: false
+      use_rare_variants: true
+      verbose: true
+      x_phenotypes: *id002
+    gt_file: genotypes.h5
+    variant_file: variants.parquet
+  #### deeprvat training config ###
+  early_stopping:
+      mode: min
+      patience: 3
+      min_delta: 0.00001
+      verbose: True
+  hyperparameter_optimization:
+      direction: maximize
+      n_trials: 1
+      sampler:
+          type: TPESampler
+          config: {}
+  model:
+    checkpoint: combined_agg.pt
+    config:
+      activation: LeakyReLU
+      metrics:
+        all:
+          MAE: {}
+          MSE: {}
+          PearsonCorrTorch: {}
+          RSquared: {}
+        loss: MSE
+        objective: MSE
+        objective_mode: min
+      optimizer:
+        config: {}
+        type: AdamW
+      phi_hidden_dim: 20
+      phi_layers: 2
+      pool: max
+      rho_hidden_dim: 10
+      rho_layers: 3
+    model_collection: agg_models
+    type: DeepSet
+  training:
+      min_variant_count: 1
+      n_bags: 10               # NOTE: changed
+      drop_n_bags: 2              # NOTE: changed
+      train_proportion: 0.8
+      dataloader_config:
+          num_workers: 0
+  pl_trainer:
+      gpus: 1
+      precision: 16
+      min_epochs: 1000            # NOTE: changed
+      max_epochs: 5000            # NOTE: changed
+      log_every_n_steps: 10
+      check_val_every_n_epoch: 10
+
+
+ ####################################### SIMULATION #######################################
+
+simulation:
+  data:
+    dataloader_config:
+      batch_size: 64
+      num_workers: 10
+    dataset_config:
+      annotation_file: annotations.parquet
+      annotations: &id003
+          - UKB_AF
+          - is_plof
+          - Consequence_splice_acceptor_variant
+          - Consequence_splice_donor_variant
+          - Consequence_stop_gained
+          - Consequence_frameshift_variant
+          - Consequence_stop_lost
+          - Consequence_start_lost
+          - Consequence_inframe_insertion
+          - Consequence_inframe_deletion
+          - Consequence_missense_variant
+          - Consequence_protein_altering_variant
+          - Consequence_splice_region_variant
+          - sift_score
+          - polyphen_score
+          - condel_score
+          - PrimateAI_score
+          - CADD_raw
+          - AbSplice_DNA
+      gene_file: genes.parquet
+      min_common_af:
+        UKB_AF: 0.01
+      phenotype_file: phenotypes.parquet
+      rare_embedding:
+        config:
+          annotations: *id003
+          gene_file: genes.parquet
+          low_memory: false
+          thresholds:
+            UKB_AF: UKB_AF < 0.01 and UKB_AF > 0
+          verbose: true
+        type: PaddedAnnotations
+      use_common_variants: false
+      use_rare_variants: true
+      verbose: true
+    gt_file: genotypes.h5
+    variant_file: variants.parquet
+  simulation_config:
+    config:
+      annotation_weight:
+        type: inverse_normalized
+      causal_gene_file: sim_causal_genes.parquet
+      covariate:
+        cov_1:
+          config:
+            loc: 0
+            scale: 1
+          pre_fac: 0.5
+          type: normal
+        cov_2:
+          config:
+            p: 0.5
+          pre_fac: 0.5
+          type: bernoulli
+      gene_weight: None
+      noise:
+        config:
+          loc: 0
+          scale: 1
+        type: normal
+      standardize_sim_phenotypes: true
+    sim_agg_model:
+      config:
+        anno_agg_method: sum
+        first_agg_dim: variants
+        maf_dim: 0
+        var_agg_method: sum
+      type: GenoAnnotWeight
+    vars_to_ensgid_mapping_file: vars_to_ensgid_mapping.parquet

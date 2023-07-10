@@ -1,0 +1,9 @@
+sim_res_dir: './simulation_experiments' #TO be filled in! #directory whith the directories listed below
+exp_name_assoc_maf_1: 'maf_filter_tuned_maf_dist_maf_1_perc'
+exp_name_assoc_maf_01: 'maf_filter_tuned_maf_dist_maf_0.1_perc'
+exp_name_assoc_maf_001: 'maf_filter_tuned_maf_dist_maf_0.01_perc'
+exp_name_vary_prop_causal: 'vary_proportion_causal_variants'
+default_config: 'prop_causal_variants:0.2;max_rare_af:0.001;var_genetic_effects:0.1;var_noise:0.95;var_expl_variant_noise:0.1;var_expl_cont:0.3;var_expl_binary:0.3;var_expl_maf:0.3'
+
+
+r_plot_data_path: 'test_output'

@@ -1,0 +1,6 @@
+__default__:
+    - "-q medium"
+
+run_over_bags:
+    - "-q long -R \"rusage[mem=60000]\""
+    

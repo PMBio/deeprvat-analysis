@@ -1,0 +1,787 @@
+---
+title: "simulation_paper_plots"
+author: "Eva"
+date: "2022-11-24"
+output: html_document
+---
+
+```{r}
+library(arrow)
+library(dplyr)
+library(ggplot2)
+library(viridis)
+library(gridExtra)
+library(grid)
+library(latex2exp)
+library(cowplot)
+library(ggpubr)
+```
+
+
+```{r}
+
+plot_data_path = 'X' #this should be the same path as `r_plot_data_path` in config_eval of simulation/simulation_analysis
+
+plot_out_path = './plots'
+simulation_exp_dir = 'X'  #this should be the same path as `sim_res_dir` in config_eval of simulation/simulation_analysis
+
+default_experiment = 'vary_proportion_causal_variants/prop_causal_variants:0.2_max_rare_af:0.001_var_genetic_effects:0.1_var_noise:0.95_var_expl_variant_noise:0.1_var_expl_cont:0.3_var_expl_binary:0.3_var_expl_maf:0.3'
+```
+
+```{r}
+font_size = 8
+font_family = "Helvetica"
+plot_font = element_text(size = font_size, family = font_family)
+label_default_size = 14 #default ggarrange size
+default_plot_width = 15.5 #used by brian
+
+```
+
+
+```{r}
+baseline_renamer = c('plof-burden' = 'Burden pLOF',
+           'missense-burden' = 'Burden missense', 
+           'plof-skat' = 'SKAT pLOF',
+           'missense-skat' = 'SKAT missense')
+  
+
+colors_methods = c('Burden pLOF' = '#c6dbef',
+           'Burden missense' = '#9ecae1', 
+           'SKAT pLOF' = '#6baed6',
+           'SKAT missense' = '#3182bd',
+           'Burden/SKAT combined' = '#08519c',
+           'DeepRVAT' = '#7A2961')
+bin_colors = hcl.colors(8, 'Oranges')[-1]
+bin_colors = bin_colors[seq(1, length(bin_colors), 2)]
+
+facet_background = strip.background = element_rect(fill = "white", colour = "black", 
+                linewidth = rel(2))
+
+
+tests_to_keep = names(colors_methods)
+
+```
+
+# MAF Filter plots
+
+```{r}
+group_renamer = c('1%', '0.1%', '0.01%')
+names(group_renamer) = c("vprop:0.2;maxaf:0.01;vgen:0.1;vnoise:0.95;vvarnoise:0.1;vcont:0.4;vbin:0.4;vmaf:0.1;expbin:10", "vprop:0.2;maxaf:0.01;vgen:0.1;vnoise:0.95;vvarnoise:0.1;vcont:0.35;vbin:0.35;vmaf:0.2;expbin:3", "vprop:0.2;maxaf:0.01;vgen:0.1;vnoise:0.95;vvarnoise:0.1;vcont:0.3;vbin:0.3;vmaf:0.3;expbin:1")
+
+# load data
+avg_metrics_maf_filter_combined = read_parquet(paste(plot_data_path, 'avg_metrics_maf_filter_combined.parquet', sep = '/')) %>% filter(test %in% tests_to_keep)
+
+avg_metrics_maf_filter_combined = avg_metrics_maf_filter_combined %>% mutate(
+    group = recode(config, !!!group_renamer, .default = NA_character_)
+  )
+avg_metrics_maf_filter_combined$assoc_maf = factor(avg_metrics_maf_filter_combined$assoc_maf, levels=c('1%', '0.1%', '0.01%'), labels=c('<1%', '<0.1%', '<0.01%')) 
+avg_metrics_maf_filter_combined$rev_assoc_maf = factor(avg_metrics_maf_filter_combined$assoc_maf, levels=rev(c('<1%', '<0.1%', '<0.01%')), 
+                                                       labels=rev(c('<1%', '<0.1%','<0.01%')))
+
+avg_metrics_maf_filter_combined$group = factor(avg_metrics_maf_filter_combined$group, levels=c('1%', '0.1%', '0.01%'), labels=c('1%', '0.1%', '0.01%')) 
+avg_metrics_maf_filter_combined$rev_group = factor(avg_metrics_maf_filter_combined$group, levels=rev(c('1%', '0.1%', '0.01%')), labels=rev(c('1%', '0.1%', '0.01%'))) 
+
+
+avg_metrics_maf_filter_combined
+```
+
+
+
+```{r}
+var_grouped_data = read_parquet(paste(plot_data_path, 'var_weights_per_bin.parquet', sep = '/'))
+var_grouped_data$group = factor(var_grouped_data$group, levels=c('1%', '0.1%', '0.01%'), labels=c('1%', '0.1%', '0.01%')) 
+var_grouped_data$group_rev = factor(var_grouped_data$group, levels=rev(c('1%', '0.1%', '0.01%')), labels=rev(c('1%', '0.1%', '0.01%'))) 
+
+var_grouped_data$interval = factor(var_grouped_data$interval, levels=rev(c('(0.0, 0.0001]', '(0.0001, 0.001]', '(0.001, 0.01]')), labels=rev(c('0-0.01%', '0.01% - 0.1%', '0.1% - 1%')))
+
+var_grouped_data
+```
+
+```{r}
+square_outline = read_parquet(paste(plot_data_path, 'square_outline_maf_plot.parquet', sep = '/')) 
+square_outline = square_outline %>% mutate(assoc_maf = recode(as.character(assoc_maf), '0.01' = '<1%', '0.001' = '<0.1%', '1e-04' = '<0.01%'),
+                                          max_rare_af = recode(as.character(max_rare_af), '0.01'= '1%', '0.001' = '0.1%', '1e-04' = '0.01%')) %>% rename(group = max_rare_af) 
+square_outline$assoc_maf = as.factor(square_outline$assoc_maf)
+square_outline$group = as.factor(square_outline$group)
+square_outline$rev_assoc_maf = as.factor(square_outline$assoc_maf)
+square_outline$rev_group = square_outline$group
+square_outline
+
+
+```
+### only to get the legend
+```{r}
+p_maf_filter_guide = ggplot(avg_metrics_maf_filter_combined %>% filter(metric == "Power" & quantile == 0.5 & test %in% tests_to_keep), 
+    aes(y=mean, x='', fill = test)) +  #, color = 'rare_maf')) + 
+    # geom_bar(stat="identity")
+    geom_col(position = position_dodge(), width = 0.9) + 
+    geom_errorbar(aes(ymin = mean-std, ymax = mean+std), position = position_dodge(0.9),
+        stat = 'identity', width = 0.4) +
+    scale_fill_manual(values=colors_methods, guide = 'none') +
+    facet_grid(cols = vars(rev_assoc_maf), rows = vars(group), labeller = labeller(.rows = label_both, .cols = label_both)) + 
+    geom_polygon(data = square_outline, mapping = aes(x = x, y = y, color = outline_size, size = outline_size, fill = NA)
+        , alpha = 0.0) +
+    scale_color_manual(values = c('black', 'black'), guide = 'none') +
+    # scale_alpha_continuous(guide = 'none') +
+    scale_size_manual(values = c(3, 0.5), guide = 'none') + 
+    scale_y_continuous(expand = c(0,0), limits = c(0, 1.1)) +
+    theme_bw() +
+    labs(x = '', y = 'Power') +
+    theme(
+            # text = plot_font,
+            # axis.text = plot_font,
+            # axis.title = plot_font,
+            axis.ticks.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            legend.title = element_blank(),
+            legend.text = element_text(size = 14),
+            strip.background = element_blank(),
+            strip.text = element_blank(),
+            panel.spacing = unit(4, "mm"),
+            panel.border = element_rect(colour = "black", fill=NA, size=1)
+            # figure.size=c(10, 4.8)
+        )
+p_maf_filter_guide = p_maf_filter_guide + scale_fill_manual(values=colors_methods, breaks = rev(names(colors_methods)), limits = rev(names(colors_methods)) )
+#ggsave(paste(plot_out_path, 'methods_legend_vertical.pdf', sep = '/'),p_maf_filter_guide, width = 6.6, height = 4.6)
+```
+
+
+```{r}
+p_maf_filter = ggplot(avg_metrics_maf_filter_combined %>% filter(metric == "Power" & quantile == 0.5 & test %in% tests_to_keep), 
+    aes(y=mean, x='', fill = test)) +  #, color = 'rare_maf')) + 
+    # geom_bar(stat="identity")
+    geom_col(position = position_dodge(), width = 0.9, color = 'darkgrey') + 
+    geom_errorbar(aes(ymin = mean-std, ymax = mean+std), position = position_dodge(0.9),
+        stat = 'identity', width = 0.4) +
+    scale_fill_manual(values=colors_methods, guide = 'none') +
+    facet_grid(cols = vars(rev_assoc_maf), rows = vars(group), labeller = labeller(.rows = label_both, .cols = label_both)) + 
+    geom_polygon(data = square_outline, mapping = aes(x = x, y = y, color = outline_size, size = outline_size, fill = NA)
+        , alpha = 0.0) +
+    scale_color_manual(values = c('black', 'black'), guide = 'none') +
+    # scale_alpha_continuous(guide = 'none') +
+    scale_size_manual(values = c(3, 0.5), guide = 'none') + 
+    scale_y_continuous(expand = c(0,0), limits = c(0, 1.1)) +
+    theme_bw() +
+    labs(x = '', y = 'Power') +
+    theme_cowplot() +
+    theme(
+            # text = plot_font,
+            # axis.text = plot_font,
+            # axis.title = plot_font,
+            axis.ticks.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            legend.title = element_blank(),
+            strip.background = element_blank(),
+            strip.text = element_blank(),
+            panel.spacing = unit(4, "mm"),
+            panel.border = element_rect(colour = "black", fill=NA, size=1)
+            # figure.size=c(10, 4.8)
+        ) +
+  background_grid()
+
+p_maf_filter
+
+
+```
+
+
+
+
+```{r}
+p_prop_hor = ggplot(var_grouped_data, 
+    aes(y=rel_effect, x='', fill = interval)) +  #, color = 'rare_maf')) + 
+    # geom_bar(stat="identity")
+    geom_col(width = 0.1, color = 'darkgrey') + 
+    scale_fill_manual(values = bin_colors, name = 'Simulated causal \n variant MAF') +
+    facet_grid(rows =  vars(group)) +
+    scale_y_continuous(expand = c(0,0), position = "right") + 
+    scale_x_discrete(expand = c(0,0)) + 
+    theme_classic() +
+    labs(x = '', y = 'Cumulative variant effect \n') + #(EAC * variant_weight)
+    theme_cowplot()+
+    theme(
+            # text = plot_font,
+            # line = element_blank(),
+            strip.background = element_blank(),
+            strip.text = element_blank(),
+            # axis.text = plot_font,
+            # axis.title = plot_font,
+            axis.ticks.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            # legend.text = plot_font,
+            panel.spacing = unit(4, "mm")
+            # panel.grid = element_blank(),
+            # panel.border = element_blank()
+        )
+
+# p_prop_hor
+
+p_prop_hor
+
+p_prop_hor_legend_horizontal = p_prop_hor + theme(legend.position="bottom")
+#ggsave(paste(plot_out_path, 'prop_hor_legend_horizontal.pdf', sep = '/'),p_prop_hor_legend_horizontal, width = 6.6, height = 4.6)
+
+```
+
+
+```{r}
+x_pos = 0.7
+y_pos = 0.2
+facet_text_config = gpar(col = "black", fontsize = 12, fontfamily = font_family)
+facet_title_001 = textGrob("<0.01%", x = unit(0.72, "npc"), y = unit(y_pos, "npc"), gp=facet_text_config, just = 'center')
+facet_title_01 = textGrob("<0.1%", x = unit(0.65, "npc"), y = unit(y_pos, "npc"), gp=facet_text_config)
+facet_title_1 = textGrob("<1%", x = unit(0.6, "npc"), y = unit(y_pos, "npc"), gp=facet_text_config)
+facet_top_title = textGrob("Association testing MAF", x = unit(0.55, "npc"), y = unit(0.2, "npc"), gp=gpar(col = "black", fontsize = 12, fontfamily = font_family))
+
+p_grid_maf_filter = grid.arrange(facet_top_title, facet_title_001, facet_title_01, facet_title_1, 
+                      p_maf_filter, p_prop_hor, layout_matrix = rbind(c(0,0,0, NA),
+                        c(1, 2, 3, NA),c(4,4,4, 5)),
+                      heights = c(0.2, 0.2, 4), widths = c(3,3,3,3)) #widths = c(3,3,3,4.2)
+p_grid_maf_filter
+#ggsave(paste(plot_out_path, 'maf_filter_plot.pdf', sep = '/'),p_grid_maf_filter, width = 6.6, height = 4.6)
+```
+
+# Proportion of causal variants
+
+```{r}
+variant_proportions = c(0.1, 0.2, 0.3)
+avg_vary_prop_causal = read_parquet(paste(plot_data_path, 'avg_vary_prop_causal.parquet', sep = '/'))
+
+p_prop = ggplot(avg_vary_prop_causal %>% filter(metric == 'Power' & test %in% tests_to_keep
+        & prop_causal_variants %in%  variant_proportions), 
+    aes(y= mean, x=factor(prop_causal_variants), fill = test)) +  
+    geom_col(stat = 'identity', position = position_dodge(), width = 0.9, color = 'darkgrey') +
+    geom_errorbar(aes(ymin = mean-std, ymax = mean+std), position = position_dodge(width = 0.9),
+        stat = 'identity', color = 'black', width = 0.4) + 
+    scale_fill_manual(values=colors_methods) + #, guide = 'none') + 
+    scale_y_continuous(expand = c(0,0)) +
+    scale_x_discrete(limits = factor(variant_proportions), labels = c('10%', '20%', '30%')) + 
+    labs(y = 'Power', x = 'Proportion of causal variants') +
+    theme_cowplot() #+
+    # theme(text = plot_font,
+    #         axis.text = plot_font,
+    #         axis.title = plot_font,
+    #         legend.title = element_blank())
+
+#ggsave(paste(plot_out_path, 'proportion_of_causal_variants_plot.pdf', sep = '/'),p_prop, width = 8, height = 4) #, width = 8, height = 4, units = 'cm')
+
+```
+
+
+```{r}
+## DeepRVAT legend
+deeprvat_legend_hor = ggplot(avg_vary_prop_causal %>% filter(metric == 'Power' & test %in% tests_to_keep
+        & prop_causal_variants %in%  variant_proportions), 
+    aes(y= mean, x=factor(prop_causal_variants), fill = test)) +  
+    geom_col(stat = 'identity', position = position_dodge(), width = 0.9, color = 'darkgrey') +
+    geom_errorbar(aes(ymin = mean-std, ymax = mean+std), position = position_dodge(width = 0.9),
+        stat = 'identity', color = 'black', width = 0.4) + 
+    scale_fill_manual(values=colors_methods) + 
+    scale_y_continuous(expand = c(0,0)) +
+    scale_x_discrete(limits = factor(variant_proportions), labels = c('10%', '20%', '30%')) + 
+    labs(y = 'Power', x = 'Proportion of causal variants') +
+    theme_cowplot() +
+    # theme(# axis.text = plot_font,
+    #         # axis.title = plot_font,
+    #         legend.title = element_blank()) + 
+  theme(legend.position="bottom", legend.text = element_text(size = 14)) +
+  guides(fill = guide_legend(nrow = 2)) +
+  labs(fill = 'Method')
+
+deeprvat_legend_vert =  ggplot(avg_vary_prop_causal %>% filter(metric == 'Power' & test %in% tests_to_keep
+        & prop_causal_variants %in%  variant_proportions), 
+    aes(y= mean, x=factor(prop_causal_variants), fill = test)) +  
+    geom_col(stat = 'identity', position = position_dodge(), width = 0.9, color = 'darkgrey') +
+    geom_errorbar(aes(ymin = mean-std, ymax = mean+std), position = position_dodge(width = 0.9),
+        stat = 'identity', color = 'black', width = 0.4) + 
+    scale_fill_manual(values=colors_methods) + 
+    scale_y_continuous(expand = c(0,0)) +
+    scale_x_discrete(limits = factor(variant_proportions), labels = c('10%', '20%', '30%')) + 
+    labs(y = 'Power', x = 'Proportion of causal variants') +
+    theme_cowplot() +
+  labs(fill = 'Method')
+
+```
+
+
+
+# Replication plot
+
+```{r}
+top_with_uncertainty = read_parquet(paste(plot_data_path, 'top_with_uncertainty.parquet', sep = '/'))
+
+p_replication = 
+    ggplot(top_with_uncertainty, aes(x=`Gene rank`, y=mean, color=Method)) + 
+    geom_line(size = 1.2) + 
+    # + geom_ribbon(aes(ymin = 'mean - std', ymax = 'mean + std', fill = 'Method'), alpha = 0.1)
+    geom_abline(intercept=0, slope=1, color='lightgray') + 
+    # + ggtitle(f'Replication rate - Top {n_genes_per_pheno} genes, {repeat}')
+    scale_color_manual(values = colors_methods) + #, guide = 'none') + 
+    scale_fill_manual(values = colors_methods) + 
+    labs(y = 'Replicated genes') + 
+    theme_cowplot() #+ 
+    # theme(
+    #         text= plot_font,
+    #         axis.text = plot_font,
+    #         axis.title = plot_font,
+    #         legend.title = element_blank(),
+    #     ) 
+
+p_replication
+#ggsave(paste(plot_out_path, 'replication_plot.pdf', sep = '/'),p_replication,  width = 8, height = 6, units = 'cm')
+
+```
+# FDR plot
+```{r}
+fdr_avg_metrics =  read_parquet(paste(plot_data_path, 'fdr_avg_metrics.parquet', sep = '/'))
+fdr_avg_metrics = fdr_avg_metrics %>% mutate(default_fdr = ifelse(`expected FDR` == 0.05, TRUE, FALSE)) 
+
+fdr_avg_metrics
+```
+
+```{r}
+p_fdr_deeprvat_default_fdr = (ggplot(fdr_avg_metrics %>% filter(metric == "FDR" & test %in% c("DeepRVAT_wo_baseline") & prop_causal_variants == 0.2 & 
+            `expected FDR` < 0.2), 
+        aes(x=`expected FDR`, y= mean, color = default_fdr)) #, color = 'rare_maf'))
+        + geom_point()
+        + geom_errorbar(aes(x=`expected FDR`, ymin = mean-std, ymax = mean+std), width = 0.002) 
+        + scale_color_manual(values = c('darkred', 'black'), limits = c(TRUE, FALSE), guide = FALSE)
+        # + facet_grid('test ~ prop_causal_variants')
+        + labs(x = 'expected FDR', y = 'empirical FDR') 
+        + theme_classic() 
+        + theme(aspect.ratio=1) 
+        # + scale_x_continuous(limits = [0, 0.17])
+        # + scale_y_continuous(limits = [0, 0.17])
+        + geom_abline(intercept=0, # set the y-intercept value
+                  slope=1      # set the slope value
+                 )
+        )
+p_fdr_deeprvat_default_fdr
+#ggsave(paste(plot_out_path, 'p_fdr_deeprvat_default_fdr.png', sep = '/'),p_fdr_deeprvat_default_fdr, width = 5, height = 6)
+
+```
+
+```{r}
+#name DeepRVAT_wo_baseline as DeepRVAT and drop DeepRVAT with baseline
+
+plot_data = fdr_avg_metrics %>% filter(test != 'DeepRVAT') 
+plot_data[['test']][plot_data[['test']] == 'DeepRVAT_wo_baseline'] = 'DeepRVAT'
+
+p_fdr_default_p_causal = (ggplot(plot_data %>% filter(metric == "FDR" & prop_causal_variants == 0.2 &
+            `expected FDR` < 0.2), 
+        aes(x=`expected FDR`, y= mean, color = default_fdr)) #, color = 'rare_maf'))
+        + geom_point()
+        + geom_errorbar(aes(x=`expected FDR`, ymin = mean-std, ymax = mean+std), width = 0.002) 
+        + scale_color_manual(values = c('darkred', 'black'), limits = c(TRUE, FALSE), guide = FALSE)    
+        + facet_wrap('test', ncol = 2)
+        + labs(x = 'expected FDR', y = 'empirical FDR') 
+        + theme_cowplot()
+        + theme(#aspect.ratio=1, 
+                strip.background = facet_background,
+                axis.text.x = element_text(size = 10),
+                panel.spacing.x = unit(2, "lines")) 
+        + geom_abline(intercept=0, # set the y-intercept value
+                  slope=1      # set the slope value
+                 )
+        )
+p_fdr_default_p_causal
+
+# #ggsave(paste(plot_out_path, 'p_fdr_default_p_causal.png', sep = '/'),p_fdr_default_p_causal, width = 10, height = 5)
+
+```
+
+
+
+```{r}
+p_fdr_alL_configs = (ggplot(fdr_avg_metrics %>% filter(metric == "FDR" & 
+            `expected FDR` < 0.2), 
+        aes(x=`expected FDR`, y= mean,  color = default_fdr)) #, color = 'rare_maf'))
+        + geom_point()
+        + geom_errorbar(aes(x=`expected FDR`, ymin = mean-std, ymax = mean+std), width = 0.002) 
+        + scale_color_manual(values = c('darkred', 'black'), limits = c(TRUE, FALSE), guide = FALSE)
+        + facet_grid('test ~ prop_causal_variants')
+        + labs(x = 'expected FDR', y = 'empirical FDR') 
+        + theme_classic() 
+        + theme(aspect.ratio=1) 
+        # + scale_x_continuous(limits = [0, 0.17])
+        # + scale_y_continuous(limits = [0, 0.17])
+        + geom_abline(intercept=0, # set the y-intercept value
+                  slope=1      # set the slope value
+                 )
+        )
+p_fdr_alL_configs
+
+#ggsave(paste(plot_out_path, 'p_fdr_alL_configs.png', sep = '/'),p_fdr_alL_configs, width = 10, height = 15)
+```
+# QQ-plots
+
+
+```{r}
+all_pvals = read_parquet(file.path(simulation_exp_dir, default_experiment,'/eval/all_associations.parquet')) %>%
+  filter(correction_method == 'FDR')# %>%
+all_pvals$method <- ifelse(all_pvals$method %in% names(baseline_renamer), baseline_renamer[all_pvals$method], all_pvals$method)
+
+all_pvals = rbind(all_pvals, all_pvals %>% filter(method != 'DeepRVAT') %>% mutate(method = 'Burden/SKAT combined')) #%>%
+  # filter((method != 'DeepRVAT' & is.na(model)) | (method == 'DeepRVAT' & model == 'repeat_0'))
+all_pvals$method = factor(all_pvals$method, levels = names(colors_methods)) 
+all_pvals %>% distinct(method)
+all_pvals %>% filter(gene == 9)
+```
+
+
+
+
+
+```{r}
+compute_lambda <- function(pvals){
+  lambda = median(qchisq(pvals, df=1, lower.tail=FALSE)) / qchisq(0.5, 1)
+  return(round(lambda, 3))
+}
+lambda_df = all_pvals  %>% 
+  select(pval, method, model, `repeat`) %>% 
+  group_by(method, `repeat`) %>% #computes lambda aggregated across DeepRVAT repeats
+  # group_by(method, model) %>% #computes lambda individually for each  DeepRVAT repeat
+  summarise(lambda = compute_lambda(pval)) %>%
+  # aggregate(pval ~ method, FUN = compute_lambda) %>% 
+  # rename('lambda' = 'pval') %>%
+  mutate(lambda_str = paste('λ', lambda, sep = '='))
+lambda_df
+```
+
+
+```{r}
+library(cowplot)
+qqplot = function(df, plot_title, lambda_df = NULL, point_color = 'black'){
+  print(nrow(df))
+  df <- df %>% arrange(pval) 
+  df['-log10pval_expected'] <- -log10(1:nrow(df) / nrow(df))
+  
+  if (!('-log10pval' %in% colnames(df))) {
+    df['-log10pval'] <- -log10(df$pval)
+  }
+  
+  line_color = ifelse(point_color == 'black', 'red', 'black')
+  plot <- ggplot(df, aes(x = `-log10pval_expected`, y = `-log10pval`)) +
+    labs(x = TeX("Expected $-log_{10}$(\\textit{p})"), y = TeX("Observed $-log_{10}$(\\textit{p})"),
+         title = plot_title) +
+    geom_abline(intercept = 0, slope = 1, color = line_color) +
+    geom_point(alpha = 0.5, color = point_color) +
+    theme_cowplot() +
+    theme(legend.position = 'none',
+          # aspect.ratio=1,
+          plot.title = element_text(size = 10), 
+          axis.title = element_text(size = 10)) 
+
+  if (!is.null(lambda_df)) {
+    lambda_df <- lambda_df %>%
+      mutate(y_text = max(df['-log10pval']) * 0.95) %>%
+      mutate(x_text = max(df['-log10pval_expected']) * 0.3)
+  
+    plot <- plot +
+      geom_text(data = lambda_df,
+                aes(x = x_text, y = y_text, label = lambda_str))
+  }
+  return(plot)
+}
+
+
+qqplot_causal_non_causal = function(df, plot_title, lambda_df = NULL, point_color = 'black', color_by_causal = FALSE){
+  print(nrow(df))
+  df <- df %>% arrange(pval) 
+  df['-log10pval_expected'] <- -log10(1:nrow(df) / nrow(df))
+  
+  if (!('-log10pval' %in% colnames(df))) {
+    df['-log10pval'] <- -log10(df$pval)
+  }
+  if (color_by_causal){
+    point_colors = c('black', 'darkred')
+
+  }else{
+    point_colors = c('black', point_color)
+  }
+  
+  line_color = ifelse(point_color == 'black', 'red', 'black')
+  plot <- ggplot(df, aes(x = `-log10pval_expected`, y = `-log10pval`, color = causal_gene, alpha = causal_gene)) +
+    labs(x = TeX("Expected $-log_{10}$(\\textit{p})"), y = TeX("Observed $-log_{10}$(\\textit{p})"),
+         title = plot_title) +
+    geom_abline(intercept = 0, slope = 1, color = line_color) +
+    geom_point() +
+    scale_color_manual(values = point_colors) +
+    scale_alpha_manual(values = c(1, 0.8)) +
+    theme_cowplot() + 
+    theme(legend.position = 'none',
+          # aspect.ratio=1,
+          plot.title = element_text(size = 10),
+          axis.title = element_text(size = 10))
+
+
+  if (!is.null(lambda_df)) {
+    lambda_df <- lambda_df %>%
+      mutate(y_text = max(df['-log10pval']) * 0.95) %>%
+      mutate(x_text = max(df['-log10pval_expected']) * 0.3)
+  
+    plot <- plot +
+      geom_text(data = lambda_df,
+                aes(x = x_text, y = y_text, label = lambda_str), color = 'black', alpha = 1)
+  }
+  return(plot)
+}
+
+
+```
+
+```{r}
+p_list_causal_split = list()
+for (this_method in levels(all_pvals$method)){
+  print(this_method)
+  plot_df = all_pvals %>% filter(`repeat` == 'sim_repeat_0') %>% filter(method == this_method)
+  this_lambda_df = lambda_df %>%  filter(`repeat` == 'sim_repeat_0')  %>% filter(method == this_method)
+  # title = ifelse(this_method %in% names(baseline_renamer), baseline_renamer[[this_method]], this_method)
+  p = qqplot_causal_non_causal(plot_df, plot_title = this_method, this_lambda_df, colors_methods[[this_method]], color_by_causal = TRUE)
+  p_list_causal_split = append(p_list_causal_split, list(p))
+}
+qq_arange_causal_split = ggarrange(plotlist = p_list_causal_split, ncol = 2, nrow = 3) +
+  theme(plot.margin = margin(1,1,0,1, "cm")) 
+qq_arange_causal_split
+
+```
+
+
+```{r}
+# legend for qqplot
+df = plot_df
+df['-log10pval_expected'] <- -log10(1:nrow(df) / nrow(df))
+
+if (!('-log10pval' %in% colnames(df))) {
+  df['-log10pval'] <- -log10(df$pval)
+}
+point_colors = c('black', 'darkred')
+df[['causal_gene_string']] = factor(as.character(df[['causal_gene']]), levels = c('FALSE', 'TRUE'), labels = c('False', 'True'))
+
+line_color = 'black'
+qq_legend_plot <- ggplot(df, aes(x = `-log10pval_expected`, y = `-log10pval`, color = causal_gene_string, alpha = causal_gene_string)) +
+  labs(x = TeX("Expected $-log_{10}$(\\textit{p})"), y = TeX("Observed $-log_{10}$(\\textit{p})")) +
+  geom_abline(intercept = 0, slope = 1, color = line_color) +
+  labs(color = 'Causal gene') +
+  geom_point() +
+  scale_color_manual(values = point_colors) +
+  scale_alpha_manual(values = c(1, 1), guide = 'none') +
+  theme_cowplot() + 
+  theme(legend.position = 'bottom', legend.text = element_text(size = 14),
+        plot.margin = margin(0,0,0,1000))
+qq_legend_plot
+```
+
+
+
+```{r}
+p_list = list()
+for (this_method in levels(all_pvals$method)){
+  print(this_method)
+  plot_df = all_pvals %>% filter(`repeat` == 'sim_repeat_0') %>% filter(method == this_method)
+  this_lambda_df = lambda_df %>%  filter(`repeat` == 'sim_repeat_0')  %>% filter(method == this_method)
+  # title = ifelse(this_method %in% names(baseline_renamer), baseline_renamer[[this_method]], this_method)
+  p = qqplot_causal_non_causal(plot_df, plot_title = this_method, this_lambda_df, colors_methods[[this_method]])
+  p_list = append(p_list, list(p))
+}
+qq_arange_causal_split = ggarrange(plotlist = p_list, ncol = 2, nrow = 3) +
+  theme(plot.margin = margin(1,1,0,1, "cm")) 
+qq_arange_causal_split
+
+```
+
+
+
+
+```{r}
+plot_width = 32
+p_grid_maf_filter = grid.arrange(facet_top_title, facet_title_001, facet_title_01, facet_title_1, 
+                      p_maf_filter, p_prop_hor + guides(fill = 'none'), layout_matrix = rbind(c(0,0,0, NA),
+                        c(1, 2, 3, NA),c(4,4,4, 5)),
+                      heights = c(0.2, 0.2, 4), widths = c(3,3,3,2)) #widths = c(3,3,3,4.2)
+
+# ggsave(file.path(plot_out_path, 'fig_2_b.png'), p_grid_maf_filter, width = 10, height = 9, unit = 'cm',
+#        scale = )
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+legend_qq = 
+legend_methods <-g_legend(deeprvat_legend_hor + labs(fill = 'Method'))
+legend_intervals <- g_legend(p_prop_hor_legend_horizontal)
+legend_qq = g_legend(qq_legend_plot)
+
+
+lay = rbind(c(NA, NA,NA,NA, 1,1,1,1),
+            c(NA, 2,2,NA,1,1,1,1),
+            c(NA,2,2,NA,NA,3,3,3),
+            c(NA,4,4,5,5,5,5,5))
+
+
+gt = grid.arrange(p_grid_maf_filter,
+             ggarrange(plotlist = p_list_causal_split, ncol = 2, nrow = 3),
+              legend_intervals, legend_qq, legend_methods, 
+          nrow = 4, ncol = 8,
+          layout_matrix = lay, heights = c(0.05,1, 0.1, 0.1),
+          widths = c(0.2,1.2, 1.2, 0.2,0.8,0.8,1,1))
+p = as_ggplot(gt) +                                # transform to a ggplot
+  draw_plot_label(label = c("a", "b"), size = plot_width/default_plot_width * label_default_size,
+                  x = c(0, 0.42), y = c(1, 1)) # Add labels
+
+ggsave(file.path(plot_out_path, 'fig_2_v2.png'), p,
+       width = plot_width,
+       height = 20,
+       unit = 'cm',
+       dpi = 600)
+
+# ggsave(file.path(plot_out_path, 'fig_2_v2.pdf'), p,
+#        width = plot_width,
+#        height = 18,
+#        unit = 'cm',
+#        dpi = 600)
+```
+
+
+```{r}
+
+plot_width = 32
+p_grid_maf_filter = grid.arrange(facet_top_title, facet_title_001, facet_title_01, facet_title_1, 
+                      p_maf_filter, p_prop_hor + guides(fill = 'none'), layout_matrix = rbind(c(0,0,0, NA),
+                        c(1, 2, 3, NA),c(4,4,4, 5)),
+                      heights = c(0.2, 0.2, 4), widths = c(3,3,3,2)) #widths = c(3,3,3,4.2)
+
+# ggsave(file.path(plot_out_path, 'fig_2_b.png'), p_grid_maf_filter, width = 10, height = 9, unit = 'cm',
+#        scale = )
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+legend_qq = 
+legend_methods <-g_legend(deeprvat_legend_hor + labs(fill = 'Method'))
+legend_intervals <- g_legend(p_prop_hor_legend_horizontal)
+legend_qq = g_legend(qq_legend_plot)
+
+lay = rbind(c(NA, NA,NA,NA, 1,1,1,1),
+            c(NA, 2,2,NA,1,1,1,1),
+            c(NA,2,2,NA,NA,3,3,3),
+            c(NA, 4,4,4,4,4,4,NA))
+
+gt = grid.arrange(p_grid_maf_filter,
+             ggarrange(plotlist = p_list, ncol = 2, nrow = 3),
+              legend_intervals, legend_methods,
+          nrow = 4, ncol = 8,
+          layout_matrix = lay, heights = c(0.05,1, 0.1, 0.1),
+          widths = c(0.2,1.2, 1.2, 0.2,0.8,0.8,1,1))
+p = as_ggplot(gt) +                                # transform to a ggplot
+  draw_plot_label(label = c("a", "b"), size = plot_width/default_plot_width * label_default_size,
+                  x = c(0, 0.42), y = c(1, 1)) # Add labels
+
+ggsave(file.path(plot_out_path, 'fig_2.png'), p, 
+       width = plot_width, 
+       height = 18,
+       unit = 'cm',
+       dpi = 600)
+
+ggsave(file.path(plot_out_path, 'fig_2.pdf'), p, 
+       width = plot_width, 
+       height = 18,
+       unit = 'cm',
+       dpi = 600)
+```
+
+
+```{r}
+# all pvalues in one plot
+qq_df_list = list()
+for (this_method in levels(all_pvals$method)){
+  print(this_method)
+  df = all_pvals %>% filter(`repeat` == 'sim_repeat_0') %>% filter(method == this_method)
+  df <- df %>% arrange(pval) 
+  df['-log10pval_expected'] <- -log10(1:nrow(df) / nrow(df))
+  
+  if (!('-log10pval' %in% colnames(df))) {
+    df['-log10pval'] <- -log10(df$pval)
+  }
+  qq_df_list = append(qq_df_list, list(df))
+}
+all_pvals_qq = do.call(rbind, qq_df_list)
+
+line_color = 'black'
+plot <- ggplot(all_pvals_qq, aes(x = `-log10pval_expected`, y = `-log10pval`, color = method)) +
+  labs(x = TeX("$Expected -log_{10}(P)$"), y = TeX("$Observed -log_{10}(P)$")) +
+  scale_color_manual(values=colors_methods) +
+  geom_abline(intercept = 0, slope = 1, color = line_color) +
+  geom_point(alpha = 0.5) +
+  theme_cowplot() +
+  theme(legend.position = 'none',
+        aspect.ratio=1,
+        plot.title = element_text(size = 10), 
+        axis.title = element_text(size = 10)) 
+plot
+```
+
+
+```{r}
+box_plot_lambda = ggplot(lambda_df, aes(x = method, y = lambda, fill = method)) +
+  geom_boxplot() +
+  scale_fill_manual(values=colors_methods, guide = 'none') +
+  # labs(title='QQ plot (uncorrected p-values)') +
+  labs(x = '', y = TeX('$\\lambda_{GC}$')) +
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle = 45,  hjust =1)) 
+  # geom_text(data= lambda_vals, mapping = aes(x = 1, y = 7, label= lambda), size = 12)
+box_plot_lambda
+```
+
+## supp figure
+```{r}
+
+# p = ggarrange(p_fdr_default_p_causal, box_plot_lambda, p_prop, p_replication, 
+#           nrow = 2, ncol =2 , labels = 'auto')
+
+
+lay = rbind(c(NA,NA,NA, NA, NA,NA),
+            c(1,1,1, NA, 2,2),
+            c(3,3,4, NA, 5, 5))
+deeprvat_legend = g_legend(deeprvat_legend_vert)
+
+p = grid.arrange(p_fdr_default_p_causal, box_plot_lambda, p_prop, deeprvat_legend, p_replication,
+          nrow = 3, ncol = 6,
+          layout_matrix = lay, heights = c(0.1, 1.5,1),
+          widths = c(1,1,1,0.2, 1,1))
+
+
+
+p = as_ggplot(gt) +                                # transform to a ggplot
+  draw_plot_label(label = c("a", "b", 'c', 'd'), size = 20,
+                  x = c(0, 0.6, 0, 0.6), y = c(1,1, 0.45, 0.45)) # Add label
+
+```
+
+```{r}
+
+plot_width = 20
+ggarrange(p_fdr_default_p_causal, 
+          box_plot_lambda, 
+          ncol = 2, nrow =1, widths = c(1.5, 1), labels = 'auto',
+          font.label = list(size = plot_width/default_plot_width * label_default_size))
+ggsave(file.path(plot_out_path, 'fig_2_supp_calibration.png') , width = plot_width, height = 15, unit = 'cm',
+       dpi = 600)
+ggsave(file.path(plot_out_path, 'fig_2_supp_calibration.pdf') , width = plot_width, height = 15, unit = 'cm',
+       dpi = 600)
+
+ggarrange( p_prop + labs(fill = '', color = ''), p_replication + labs(fill = '', color = ''), 
+          ncol = 2, nrow =1,  labels = 'auto', common.legend = TRUE,  legend="bottom",
+          font.label = list(size = plot_width/default_plot_width * label_default_size ))  
+ggsave(file.path(plot_out_path, 'fig_2_supp_additional_simulations.png'), width = plot_width, height = 10, unit = 'cm',
+       dpi = 600)
+ggsave(file.path(plot_out_path, 'fig_2_supp_additional_simulations.pdf'), width = plot_width, height = 10, unit = 'cm',
+       dpi = 600)
+
+```
+

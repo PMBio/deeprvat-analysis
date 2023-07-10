@@ -1,0 +1,634 @@
+---
+title: "DeepRVAT - RVAT figures"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+Load libraries
+
+```{r}
+library(ggplot2)
+library(arrow)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(ggpubr)
+```
+
+Metadata
+
+```{r}
+phenotypes <- c(
+  "Apolipoprotein_A",
+  "Apolipoprotein_B",
+  "Calcium",
+  "Cholesterol",
+  "HDL_cholesterol",
+  "IGF_1",
+  "LDL_direct",
+  "Lymphocyte_percentage",
+  "Mean_corpuscular_volume",
+  "Mean_platelet_thrombocyte_volume",
+  "Mean_reticulocyte_volume",
+  "Neutrophill_count",
+  "Platelet_count",
+  "Platelet_crit",
+  "Platelet_distribution_width",
+  "Red_blood_cell_erythrocyte_count",
+  "SHBG",
+  "Standing_height",
+  "Total_bilirubin",
+  "Triglycerides",
+  "Urate"
+  )
+```
+
+Load DeepRVAT results
+
+```{r}
+results_dir <- "paper_experiment"
+
+results_list <- list()
+for (p in phenotypes) {
+  results_list[[p]] <- read_parquet(file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet"))
+}
+
+results <- bind_rows(results_list) %>%
+  rename(Trait = phenotype) 
+results
+
+significant <- results %>%
+  filter(significant) %>%
+  distinct(Trait, Method, gene, .keep_all = TRUE)
+significant
+
+counts <- bind_rows(
+  significant %>% mutate(is_single_trait = "True"),
+  significant %>% mutate(Trait = "All traits", is_single_trait = "False")
+) %>%
+ mutate(
+    Trait = case_match(
+      Trait,
+      "IGF 1" ~ "IGF-1",
+      "Mean platelet thrombocyte volume" ~ "MPTV",
+      "Red blood cell erythrocyte count" ~ "Erythrocyte count",
+      .default = Trait
+      )
+  ) %>%
+  mutate(
+    Method = factor(Method),
+    Trait = factor(Trait)
+      ) %>%
+  count(Trait, Method, is_single_trait, .drop = FALSE)
+counts[is.na(counts$is_single_trait), "is_single_trait"] <- "True"
+counts
+```
+
+Load Monti et al. results
+
+```{r}
+replication_monti_reimplemented <- readRDS("~/ukbb/experiments/rvat/results/replication_monti_reimplemented.Rds") %>%
+  filter(exp_name == "Monti-Rep Quantile-transformed") %>%
+  mutate(Method = 'Monti et al.') 
+
+counts_monti = replication_monti_reimplemented %>% 
+  group_by(Trait, Method) %>% summarise(n = sum(Significant)) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True'))
+counts_monti 
+```
+
+Load STAAR results
+
+```{r}
+replication_staar = readRDS('/home/b685e/ukbb/experiments/experiments_eva/staar/replication_staar.Rds') %>% mutate(Method = 'STAAR')
+replication_staar$Trait <- str_replace(replication_staar$Trait, "All Traits",  'All traits')
+replication_staar$Trait <- str_replace(replication_staar$Trait, "Mean platelet thrombocyte volume",  'MPTVS')
+
+counts_staar = replication_staar %>% 
+  group_by(Trait, Method) %>% summarise(n = sum(Significant)) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) 
+ counts_staar
+```
+
+Combine results
+
+```{r}
+methods <- c('Burden pLOF', 'Burden missense', 'SKAT pLOF', 'SKAT missense', 'Burden/SKAT combined', "Monti et al.", "STAAR", 'DeepRVAT')
+
+counts = rbind(counts, counts_monti, counts_staar) %>%
+  mutate(Method = factor(Method, levels=methods)) %>%
+  mutate(Trait = case_match(
+    Trait,
+    "MPTVS" ~ "MPTV",
+    .default = Trait
+  ))
+
+counts %>% filter(Trait == "All traits")
+counts %>% filter(Trait != "All traits")
+levels(counts$Method)
+
+counts %>% pivot_wider(names_from = Method, values_from = n)
+```
+
+ggplot2 theme
+
+```{r}
+colors <- c('#c6dbef', '#9ecae1', '#6baed6', '#3182bd', '#08519c', "aquamarine4", '#E6AB02', '#7A2961')
+
+
+font_size <- 8
+font_family <- "Helvetica"
+plot_font <- element_text(size = font_size, family = font_family)
+
+base_theme <- theme(
+    text = element_text(size = font_size, family = font_family),
+    axis.text = element_text(size = font_size, family = font_family),
+    axis.title = element_text(size = font_size + 2, family = font_family),
+
+    strip.text.x = element_blank(),
+    strip.text.y = element_blank(),
+    
+    legend.title=element_blank(),
+    
+    panel.background = element_rect(fill='transparent'), #transparent panel bg
+    plot.background = element_rect(fill='transparent', color=NA, linewidth = 0), #transparent plot bg
+    legend.background = element_rect(fill='transparent'), #transparent legend bg
+    legend.box.background = element_rect(fill='transparent', color=NA), #transparent legend panel
+)
+```
+
+Fig. 3a
+
+```{r}
+discovery_plot_alltraits <- ggplot(
+    counts %>% filter(Trait == "All traits"),
+    aes(
+      x=Trait,
+      y=n,
+      fill=Method,
+    )
+) + 
+geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+ylab("Significant gene-trait\nassociations") +
+theme_classic() +
+# facet_grid(. ~ is_single_trait, scales='free', space='free') +
+base_theme + 
+theme(
+    axis.text.x=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
+    axis.text.y=element_blank(),
+    # axis.title.x=element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y=element_blank(),
+    legend.key.size=unit(0.5, "line"),
+    legend.text = element_text(size = font_size, family = font_family),
+    legend.position = "bottom"
+    #panel.spacing=unit(0.75, "cm"),
+    #plot.margin = margin(1, 1, 1, 1, "cm"),
+) +
+scale_fill_manual(values = colors) +
+  coord_flip() +
+  guides(fill = guide_legend(nrow = 4))
+
+
+ggsave("discoveries_alltraits.pdf", width = 7.25, height = 6, units = "cm", bg = "transparent")
+discovery_plot_alltraits
+```
+
+Order traits
+
+```{r}
+traits <- sort(unique(counts$Trait))
+```
+
+Fig. 3c
+
+```{r}
+counts <- counts %>% 
+  mutate(Trait = factor(Trait, levels = rev(traits))) %>%
+  mutate(grid_column = (21 - as.integer(Trait)) %/% 7)
+
+discovery_plot_singletraits <- ggplot(
+    counts %>% filter(as.logical(is_single_trait)),
+    aes(
+      x=Trait,
+      y=n,
+      fill=Method,
+    )
+) + 
+geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+ylab("Significant gene-trait associations") +
+theme_classic() +
+facet_wrap(vars(grid_column), scales='free') +
+base_theme + 
+theme(
+    axis.text.x=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
+    axis.text.y=element_text(angle=45, #vjust=1, hjust=1, 
+                             size = font_size, family = font_family),
+    axis.title.y=element_blank(),
+    # axis.title.y=element_blank(),
+    legend.key.size=unit(0.5, "line"),
+    legend.position = "none",
+    panel.spacing=unit(0.75, "cm"),
+    # plot.margin = margin(1, 1, 1, 1, "cm"),
+) +
+scale_fill_manual(values = colors) +
+  coord_flip()
+
+ggsave("discoveries_singletraits.pdf", width = 15.5, height = 8, units = "cm", bg = "transparent")
+discovery_plot_singletraits
+```
+
+Fig. 3b
+
+```{r}
+replication_genes <- read_parquet("replication_genes.parquet") %>%
+  select(Trait, gene) %>%
+  mutate(
+    Trait = case_match(
+      Trait,
+      "Apolipoprotein_A" ~ "Apolipoprotein A",
+      "Apolipoprotein_B" ~ "Apolipoprotein B",
+      "HDL_cholesterol" ~ "HDL cholesterol",
+      "IGF_1" ~ "IGF-1",
+      "LDL_direct" ~ "LDL direct",
+      "Lymphocyte_percentage" ~ "Lymphocyte percentage",
+      "Mean_corpuscular_volume" ~ "Mean corpuscular volume",
+      "Mean_reticulocyte_volume" ~ "Mean reticulocyte volume",
+      "Neutrophill_count" ~ "Neutrophill count",
+      "Platelet_count" ~ "Platelet count",
+      "Platelet_crit" ~ "Platelet crit",
+      "Platelet_distribution_width" ~ "Platelet distribution width",
+      "SHBG" ~ "SHBG",
+      "Standing_height" ~ "Standing height",
+      "Total_bilirubin" ~ "Total bilirubin",
+      "Mean_platelet_thrombocyte_volume" ~ "MPTV",
+      "Red_blood_cell_erythrocyte_count" ~ "Erythrocyte count",
+      .default = Trait
+      )
+  )
+replication_genes
+
+replication <- results %>%
+  arrange(Trait, Method, `Discovery type`, pval) %>%
+  distinct(Trait, Method, gene, .keep_all = TRUE) %>%
+  left_join(replication_genes %>% mutate(Replicated = TRUE)) %>%
+  mutate(Replicated = case_when(
+    is.na(Replicated) ~ FALSE,
+    .default = Replicated
+  )) %>%
+  arrange(pval) %>%
+  group_by(Method) %>%
+  mutate(
+    Rank = row_number(),
+    Trait = "All traits"
+      ) %>%
+  group_modify(~ head(.x, 1000)) %>%
+  mutate(Replicated = cumsum(Replicated)) %>%
+  rename(
+    `Gene rank` = Rank, 
+    `Replicated genes` = Replicated,
+    Significant = significant
+    )
+replication
+```
+
+```{r}
+replication <- read_parquet(file.path(results_dir, "replication.parquet"))
+# replication <- replication %>% rename("Rank" = "Gene rank", "Replicated" = "Replicated genes")
+replication <- replication %>% 
+  filter(pheno_grouping == "all_phenotypes")
+replication
+
+replication_monti_reimplemented_all_traits <- replication_monti_reimplemented %>%
+  filter(Trait == "All traits") %>%
+  rename(`Gene rank` = Rank, `Replicated genes` = Replicated)
+replication_monti_reimplemented_all_traits
+
+replication_staar_all_traits =  replication_staar %>% 
+  filter(Trait == 'All traits') %>% 
+  rename(`Gene rank` = Rank, `Replicated genes` = Replicated)
+replication_staar_all_traits
+
+replication <- bind_rows(replication, replication_monti_reimplemented_all_traits, replication_staar_all_traits)
+replication
+
+replication_full <- bind_rows(
+  replication,
+  replication_monti_reimplemented %>%
+    rename(`Gene rank` = Rank, `Replicated genes` = Replicated),
+  replication_staar %>% 
+    rename(`Gene rank` = Rank, `Replicated genes` = Replicated)
+) %>%
+  mutate(Trait = case_match(
+    Trait,
+    "MPTVS" ~ "MPTV",
+    .default = Trait
+  ))
+replication
+
+replication$Significant <- recode(factor(replication$Significant, levels=c(TRUE, FALSE)), `TRUE` = "True", `FALSE` = "False")
+replication_full$Significant <- recode(factor(replication_full$Significant, levels=c(TRUE, FALSE)), `TRUE` = "True", `FALSE` = "False")
+replication
+
+replication <- replication %>%
+  mutate(Method = factor(Method, levels=methods)) %>%
+  mutate(Trait = case_match(
+    Trait,
+    "MPTVS" ~ "MPTV",
+    .default = Trait
+  ))
+replication
+
+replication_plot <- ggplot(replication, aes(x=`Gene rank`, y=`Replicated genes`, color=Method)) +
+geom_abline(intercept=0, slope=1, color='lightgray', linewidth=0.5) +
+geom_step(linewidth=0.4, aes(linetype=Significant)) +
+scale_color_manual(values = colors) +
+theme_classic() +
+base_theme +
+theme(
+    axis.text.x=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
+    axis.text.y=element_text(angle=45, #vjust=1, hjust=1, 
+                             size = font_size, family = font_family),
+    legend.position = "none"
+)
+
+max_significant <- replication %>% 
+  filter(as.logical(Significant)) %>% 
+  group_by(Method) %>% 
+  summarize(`Gene rank` = max(`Gene rank`), `Replicated genes` = max(`Replicated genes`))
+max_significant
+replication_plot <- replication_plot + geom_point(data=max_significant, aes(x=`Gene rank`, y=`Replicated genes`, color=Method))
+replication_plot
+```
+
+
+
+```{r}
+replication_genes %>% distinct(Trait)
+replication %>% distinct(Trait)
+```
+
+
+Arrange Fig. 3 plots
+
+```{r}
+size_a <- list(width = 7.25, height = 6)
+size_b <- list(width = 8, height = 6)
+size_c <- list(width = 15.5, height = 8)
+
+hjust <- 0.5
+padding <- 0.25
+
+fig3 <- ggarrange(
+  ggarrange(
+    NULL, discovery_plot_alltraits, replication_plot,
+    labels = c("", "a", "b"),
+    widths = c(padding, size_a$width, size_b$width),
+    hjust = hjust,
+    nrow = 1,
+    ncol = 3),
+  ggarrange(
+    NULL, discovery_plot_singletraits,
+    labels = c("", "c"),
+    hjust = hjust,
+    widths = c(padding, size_c$width)),
+  nrow = 2,
+  ncol = 1,
+  heights = c(size_a$height, size_c$height)
+  )
+fig3
+```
+
+Supp. Fig. 3.3
+
+```{r}
+results_paper <- results
+
+results_dir <- "permutation_analysis"
+
+results_list <- list()
+for (p in phenotypes) {
+  results_list[[p]] <- read_parquet(file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet"))
+}
+
+results <- bind_rows(results_list) %>%
+  rename(Trait = phenotype) %>%
+  filter(Method == "DeepRVAT", `Discovery type` == "New DeepRVAT discovery")
+results
+
+significant <- results %>%
+  filter(significant) %>%
+  distinct(Trait, Method, gene, .keep_all = TRUE)
+significant
+
+counts <- bind_rows(
+  significant %>% mutate(is_single_trait = "True"),
+  significant %>% mutate(Trait = "All traits", is_single_trait = "False")
+) %>%
+ mutate(
+    Trait = case_match(
+      Trait,
+      "IGF 1" ~ "IGF-1",
+      "Mean platelet thrombocyte volume" ~ "MPTV",
+      "Red blood cell erythrocyte count" ~ "Erythrocyte count",
+      .default = Trait
+      )
+  ) %>%
+  mutate(
+    Method = factor(Method),
+    Trait = factor(Trait)
+      ) %>%
+  count(Trait, Method, is_single_trait, .drop = FALSE)
+counts[is.na(counts$is_single_trait), "is_single_trait"] <- "True"
+counts
+```
+
+```{r}
+colors <- c("#3182bd", '#7A2961')
+
+discovery_plot_alltraits <- ggplot(
+    counts,
+    aes(
+      x=Trait,
+      y=n,
+      fill=Method,
+    )
+) + 
+geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+ylab("Significant gene-trait associations\n(new DeepRVAT discoveries)") +
+theme_classic() +
+base_theme + 
+theme(
+    axis.text.x=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
+    axis.text.y=element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y=element_blank(),
+    legend.key.size=unit(0.5, "line"),
+    legend.position = "bottom",
+    legend.title=element_blank()
+) +
+  scale_fill_manual(values = colors) +
+  coord_flip() +
+  guides(fill = guide_legend(reverse = TRUE, nrow = 2, byrow = TRUE))
+
+discovery_plot_alltraits
+```
+
+```{r}
+prep_for_qqplot <- function(pval_df, group_name) {
+  return(
+    pval_df %>%
+      arrange(pval) %>%
+      mutate(
+        neg_log10_pval_observed = -log10(pval),
+        neg_log10_pval_expected = -log10((1:nrow(pval_df)) / nrow(pval_df))
+      )
+  )
+}
+
+pvals_for_qqplot <- rowbind(
+  results %>% mutate(Method = "permutation_analysis"), 
+  results_paper %>% mutate(Method = "paper_experiment")
+  ) %>%
+  group_by(Method) %>%
+  group_modify(prep_for_qqplot)
+
+compute_lambda <- function(pvals) {
+  chisq <- qchisq(1 - pvals, 1)
+  lambda <- median(chisq) / qchisq(0.5,1)
+  return(format(round(lambda, 4), nsmall = 4))
+}
+
+lambda_true <- compute_lambda(filter(pvals, Method == "multipheno")$pval)
+lambda_perm <- compute_lambda(filter(pvals, Method == "multipheno_permutedpheno")$pval)
+```
+
+```{r}
+qqplot <- ggplot(
+  pvals_for_qqplot %>%
+    mutate(
+      Method = case_match(
+        Method,
+        "paper_experiment" ~  "True",
+        "permutation_analysis" ~ "Permuted"
+      )
+    ), 
+  aes(x = neg_log10_pval_expected, y = neg_log10_pval_observed, color = Method)
+  ) +
+  geom_abline(intercept=0, slope=1, color='lightgray', linewidth=0.5) +
+  geom_point(alpha = 0.5, size = 0.3) + 
+  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_true, "$")), x = 1.5, y = 30, color = colors[2]) +
+  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_perm, "$")), x = 1.5, y = 25, color = colors[1]) +
+  scale_x_continuous(name=expression(Expected~~-log[10](italic(p)))) +
+  scale_y_continuous(name=expression(Observed~~-log[10](italic(p)))) + 
+  scale_color_manual(values = colors) +
+  theme_classic() +
+  base_theme +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(8, "points")
+  ) +
+  guides(color = guide_legend(
+    title="Trait values"),
+    title.position = "top",
+    override.aes = list(size=10))
+qqplot
+```
+
+```{r}
+fig3.3 <- ggarrange(
+  NULL, discovery_plot_alltraits, qqplot,
+  labels = c("a", "", "b"),
+  widths = c(0.1, 1, 1),
+  nrow = 1,
+  ncol = 3
+)
+fig3.3
+```
+
+
+
+Supp. Fig. 3.4
+
+```{r}
+significant <- tibble()
+for (dir in c("paper_experiment", "linear_model", "plof_missense_anno")) {
+  for (p in phenotypes) {
+    results_list[[p]] <- read_parquet(file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet"))
+  }
+  
+  results <- bind_rows(results_list) %>%
+    rename(Trait = phenotype) %>%
+    filter(Method == "DeepRVAT") %>%
+    mutate(Method = dir)
+  
+  this_significant <- results %>%
+    filter(significant) %>%
+    distinct(Trait, Method, gene, .keep_all = TRUE)
+  significant <- bind_rows(
+    significant,
+    this_significant
+  )
+}
+
+significant
+
+counts <- bind_rows(
+  significant %>% mutate(is_single_trait = "True"),
+  significant %>% mutate(Trait = "All traits", is_single_trait = "False")
+) %>%
+ mutate(
+    Trait = case_match(
+      Trait,
+      "IGF 1" ~ "IGF-1",
+      "Mean platelet thrombocyte volume" ~ "MPTV",
+      "Red blood cell erythrocyte count" ~ "Erythrocyte count",
+      .default = Trait
+      )
+  ) %>%
+  mutate(
+    Method = factor(Method),
+    Trait = factor(Trait)
+      ) %>%
+  count(Trait, Method, is_single_trait, .drop = FALSE)
+counts[is.na(counts$is_single_trait), "is_single_trait"] <- "True"
+counts
+```
+
+```{r}
+replication <- tibble()
+for (dir in c("paper_experiment", "linear_model", "plof_missense_anno")) {
+  this_replication <- read_parquet(file.path("linear_model", "replication.parquet"))
+  this_replication <- this_replication %>% 
+    filter(
+      pheno_grouping == "all_phenotypes",
+      Method == "DeepRVAT"
+      ) %>%
+    mutate(Method = dir)
+
+  this_replication$Significant <- recode(factor(this_replication$Significant, levels=c(TRUE, FALSE)), `TRUE` = "True", `FALSE` = "False")
+
+  replication <- bind_rows(
+    replication,
+    this_replication
+  )
+}
+
+replication_plot <- ggplot(replication, aes(x=`Gene rank`, y=`Replicated genes`, color=Method)) +
+geom_abline(intercept=0, slope=1, color='lightgray', linewidth=0.5) +
+geom_step(linewidth=0.4, aes(linetype=Significant)) +
+scale_color_viridis_d() +
+theme_classic() +
+base_theme
+
+max_significant <- replication %>% 
+  filter(as.logical(Significant)) %>% 
+  group_by(Method) %>% 
+  summarize(`Gene rank` = max(`Gene rank`), `Replicated genes` = max(`Replicated genes`))
+max_significant
+replication_plot <- replication_plot + geom_point(data=max_significant, aes(x=`Gene rank`, y=`Replicated genes`, color=Method))
+
+replication_plot
+```
+
