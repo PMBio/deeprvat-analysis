@@ -1,13 +1,18 @@
 from pathlib import Path
 from typing import List
 
-configfile: "config.yaml"
+#configfile: "config.yaml"
 
-# where explain_mutagenesis_indv.py file is saved along with pl_models.py
+# where explain_mutagenesis_indv.py file is saved along with models.py
 py = 'python ~/genopheno/genopheno/aggregation_metrics/'
 
 # base_dir is where model ckpts are saved 
+# update this with deeprvat/pretrained_models
 base_dir = '~/experiments/rvat/multipheno_bagging_reverse'
+
+
+## TODO: input covariates y and tensor missing now? 
+## need the path where they are generated
 
 repeats = ['0', '1', '2', '3', '4', '5']
 annotations = ['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']

@@ -5,6 +5,8 @@ import math
 import pickle
 import os
 import sys
+import zarr
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from pprint import pformat, pprint
@@ -19,25 +21,26 @@ import torch
 import torch.nn as nn
 import statsmodels.api as sm
 import yaml
+
 from joblib import Parallel, delayed
 from numcodecs import Blosc
-from scipy.sparse import coo_matrix
-from statsmodels.tools.tools import add_constant
 from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm import tqdm
-import zarr
-import re
-import shap
-from matplotlib import pyplot
 
-import genopheno.aggregation_metrics.agg_models as agg_models
-import genopheno.aggregation_metrics.pl_models as pl_models
-from genopheno.aggregation_metrics.learn_burden import PhenotypeModel
-from genopheno.data import DenseGTDataset
-from genopheno.train import GenoPheno
-from genopheno.utils import suggest_batch_size
-from seak import scoretest
+import deeprvat.models as pl_models
 
+
+#from genopheno.aggregation_metrics.learn_burden import PhenotypeModel
+#from genopheno.data import DenseGTDataset
+#from genopheno.train import GenoPheno
+#from genopheno.utils import suggest_batch_size
+#import genopheno.aggregation_metrics.agg_models as agg_models
+#import genopheno.aggregation_metrics.pl_models as pl_models
+#from seak import scoretest
+#import shap
+#from matplotlib import pyplot
+#from scipy.sparse import coo_matrix
+#from statsmodels.tools.tools import add_constant
 
 
 logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s: %(message)s',
@@ -367,6 +370,8 @@ def compute_model_predictions(config,
         mutated_data = dict()
         mutated_data[pheno] = dict()
         
+        
+        ## TODO: update accordingly to new repo.
         input_tensor_file = f'{input_dir}/{pheno}/deeprvat/input_tensor.zarr'
         covariates_file =f'{input_dir}/{pheno}/deeprvat/covariates.zarr'
         y_file = f'{input_dir}/{pheno}/deeprvat/y.zarr'
