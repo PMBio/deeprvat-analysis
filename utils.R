@@ -19,7 +19,22 @@ phenotypes <- c(
   'Platelet_distribution_width',
   'Lymphocyte_percentage',
   'Neutrophill_count',
-  'Red_blood_cell_erythrocyte_count'
+  'Red_blood_cell_erythrocyte_count',
+  "Body_mass_index_BMI",
+  "Glucose",
+  "Vitamin_D",
+  "Albumin",
+  "Total_protein",
+  "Cystatin_C",
+  "Gamma_glutamyltransferase",
+  "Alkaline_phosphatase",
+  "Creatinine",
+  "Whole_body_fat_free_mass",
+  "Forced_expiratory_volume_in_1_second_FEV1",
+  "QTC_interval",
+  "Glycated_haemoglobin_HbA1c",
+  "WHR",
+  "WHR_Body_mass_index_BMI_corrected"
 )
 
 phenotypes_deeprvat <- c(
@@ -36,14 +51,29 @@ phenotypes_deeprvat <- c(
   'Urate',
   'Mean corpuscular volume',
   'Platelet count',
-  'Mean platelet thrombocyte volume',
+  'MPTVS',
   'Platelet crit',
   'Standing height',
   'Mean reticulocyte volume',
   'Platelet distribution width',
   'Lymphocyte percentage',
   'Neutrophill count',
-  'Erythrocyte count'
+  'Erythrocyte count',
+  "Body mass index BMI",
+  "Glucose",
+  "Vitamin D",
+  "Albumin",
+  "Total protein",
+  "Cystatin C",
+  "Gamma glutamyltransferase",
+  "Alkaline phosphatase",
+  "Creatinine",
+  "Whole body fat free mass",
+  "Forced expiratory volume in 1 second FEV1",
+  "QTC interval",
+  "Glycated haemoglobin HbA1c",
+  "WHR",
+  "WHR Body mass index BMI corrected"
 )
 
 names(phenotypes_deeprvat) = phenotypes
