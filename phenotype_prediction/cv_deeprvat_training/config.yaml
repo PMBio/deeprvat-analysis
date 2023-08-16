@@ -110,6 +110,7 @@ seed_genes:
 
 
 deeprvat:
+  do_scoretest: True
   alpha: 0.05
 
   n_burden_chunks: 4
