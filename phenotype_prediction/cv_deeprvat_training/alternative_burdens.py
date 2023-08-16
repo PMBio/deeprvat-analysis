@@ -168,7 +168,7 @@ def get_plof_burden(
 
 
 # TODO: This is almost the same as compute_burdens_, should be refactored
-def compute_plof_burdens_(
+def compute_alternative_burdens_(
     debug: bool,
     config: Dict,
     ds: torch.utils.data.Dataset,
@@ -300,7 +300,7 @@ def compute_plof_burdens_(
 @click.option("--dataset-file", type=click.Path(), default=None)
 @click.argument("config-file", type=click.Path(exists=True))
 @click.argument("out-dir", type=click.Path(exists=True))
-def compute_plof_burdens(
+def compute_alternative_burdens(
     debug: bool,
     n_chunks: Optional[int],
     chunk: Optional[int],
@@ -334,7 +334,7 @@ def compute_plof_burdens(
 
     ds_dataset = dataset.dataset if isinstance(dataset, Subset) else dataset
 
-    genes, _, _, _ = compute_plof_burdens_(
+    genes, _, _, _ = compute_alternative_burdens_(
         debug, config, dataset, out_dir, btype, n_chunks=n_chunks, chunk=chunk
     )
 

@@ -113,7 +113,7 @@ deeprvat:
   alpha: 0.05
 
   n_burden_chunks: 4
-  n_regression_chunks: 20
+  n_regression_chunks: 4
 
   n_repeats: 6
 
