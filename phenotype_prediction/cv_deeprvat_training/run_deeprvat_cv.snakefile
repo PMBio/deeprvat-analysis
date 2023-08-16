@@ -3,7 +3,6 @@ from snakemake.utils import Paramspace
 from snakemake.utils import min_version
 from name_mappings import BTYPES_DICT, PLOF_CONSEQUENCES
 import os
-
 min_version("6.0")
 
 from pathlib import Path
@@ -23,7 +22,7 @@ cuda_visible_devices = 'echo CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES'
 DEEPRVAT_ANALYSIS_DIR = os.environ['DEEPRVAT_ANALYSIS_DIR']
 DEEPRVAT_DIR = os.environ['DEEPRVAT_DIR']
 
-pipeline_dir = f'{DEEPRVAT_ANALYSIS_DIR}/phenotype_predction/cv_deeprvat_training/'
+pipeline_dir = f'{DEEPRVAT_ANALYSIS_DIR}/phenotype_prediction/cv_deeprvat_training/'
 py_pipeline = f'python {pipeline_dir}'
 py_deeprvat = f'python {DEEPRVAT_DIR}/deeprvat'
 
@@ -35,8 +34,8 @@ alt_burdens_chunks = 30
 repeats_to_compare = [6]
 phenotypes = config['phenotypes']
 phenotypes = phenotypes.keys() if type(phenotypes) == dict else phenotypes
-phenotypes_testing = phenotypes
-
+phenotypes_testing = phenotypes[1:2]
+burden_phenotype = phenotypes_testing[0]
 
 
 association_testing_maf = config.get('association_testing_maf', 0.001)
@@ -45,7 +44,7 @@ n_bags = config['deeprvat']['training'].get('n_bags')
 n_repeats = config['deeprvat'].get('n_repeats', 6)
 n_burden_chunks = config['deeprvat'].get('n_burden_chunks', 1) if not debug_flag else 2
 n_regression_chunks = config['deeprvat'].get('n_regression_chunks', 40) if not debug_flag else 2
-n_regression_chunks = 10
+n_regression_chunks = 4
 
 config['seed_genes']['phenotypes'] = config['phenotypes']
 config['deeprvat']['phenotypes'] = config['phenotypes']
@@ -60,24 +59,35 @@ btypes = list(set(btypes) - set(PLOF_CONSEQUENCES))
 btypes = [BTYPES_DICT[btype] if btype in BTYPES_DICT else btype for btype in btypes]
 btypes.append('plof')
 
+
 rule all:
     input:
         expand("cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/eval/significant.parquet",
-               cv_split = range(cv_splits), phenotype=phenotypes),
+               cv_split = range(cv_splits), phenotype=phenotypes_testing),
         expand("cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/eval/all_results.parquet",
-               cv_split = range(cv_splits), phenotype=phenotypes),
+               cv_split = range(cv_splits), phenotype=phenotypes_testing),
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/burdens.zarr',
                 p = phenotypes_testing[0], cv_split=range(cv_splits)),
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens/burdens.zarr',
                 p = phenotypes_testing[0], cv_split=range(cv_splits)),
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/burdens.zarr',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing),      
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/burdens.zarr',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing), 
+        expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/chunk{c}.linked',
+                p = [pheno for pheno in phenotypes_testing if pheno != burden_phenotype],
+                 c = range(n_burden_chunks), cv_split=range(cv_splits)),
+        expand('cv_split{cv_split}/baseline/{p}/eval/burden_associations.parquet',
+                p = phenotypes_testing, cv_split=range(cv_splits)),
+        # expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/burdens.zarr',
+        #         cv_split=range(cv_splits),
+        #         btype = btypes,
+        #         phenotype = phenotypes_testing),      
+        # expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/burdens.zarr',
+        #         cv_split=range(cv_splits),
+        #         btype = btypes,
+        #         phenotype = phenotypes_testing), 
+        # expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
+        #         cv_split=range(cv_splits),
+        #         btype = btypes,
+        #         phenotype = phenotypes_testing),
+
 
 rule spread_config:
     input:
@@ -85,8 +95,7 @@ rule spread_config:
     output:
         baseline = 'cv_split{cv_split}/baseline/config.yaml',
         deeprvat = 'cv_split{cv_split}/deeprvat/config.yaml',
-        plof = 'cv_split{cv_split}/alternative_burdens/config.yaml'
-
+        alternative_burdens = 'cv_split{cv_split}/alternative_burdens/config.yaml'
     params:
         out_path = 'cv_split{cv_split}/'
     threads: 1
@@ -144,9 +153,23 @@ module deeprvat_workflow:
 
 use rule * from deeprvat_workflow exclude config, choose_training_genes, train_bagging, regress, compute_burdens, compute_burdens_test, best_bagging_run, cleanup_burden_cache, link_burdens, link_burdens_test, all_burdens  as deeprvat_*
 
-
+use rule evaluate from deeprvat_workflow as deeprvat_evaluate with:
+    params:
+        prefix = 'cv_split{cv_split}/deeprvat',
+        use_seed_genes = '--use-seed-genes'
 
 use rule regress from deeprvat_workflow as deeprvat_regress with:
+    input:
+        config = "cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/hpopt_config.yaml",
+        chunks = lambda wildcards: expand(
+            ('cv_split{{cv_split}}/deeprvat/{{phenotype}}/deeprvat/burdens/chunk{chunk}.' +
+             ("finished" if wildcards.phenotype == burden_phenotype else "linked")),
+            chunk=range(n_burden_chunks)
+        ),
+        phenotype_0_chunks =  expand(
+            'cv_split{{cv_split}}/deeprvat/' + burden_phenotype + '/deeprvat/burdens/chunk{chunk}.finished',
+            chunk=range(n_burden_chunks)
+        ),
     params:
         prefix = 'cv_split{cv_split}/deeprvat'
 
@@ -161,7 +184,7 @@ use rule compute_burdens from deeprvat_workflow as deeprvat_compute_burdens with
         prefix = 'cv_split{cv_split}/deeprvat'
 
 
-rule all_bagging:
+rule all_training:
     input:
         expand('cv_split{cv_split}/deeprvat/models/repeat_{repeat}/best/bag_{bag}.ckpt',
                bag=range(n_bags), repeat=range(n_repeats),
@@ -170,11 +193,11 @@ rule all_bagging:
                repeat=range(n_repeats),
                cv_split = range(cv_splits))
 
-use rule best_bagging_run from deeprvat_workflow as deeprvat_best_bagging_run with:
+use rule best_training_run from deeprvat_workflow as deeprvat_best_training_run with:
     params:
         prefix = 'cv_split{cv_split}/deeprvat'
 
-use rule train_bagging from deeprvat_workflow as deeprvat_train_bagging with:
+use rule train from deeprvat_workflow as deeprvat_train with:
     params:
         prefix = 'cv_split{cv_split}/deeprvat',
         phenotypes = " ".join( #TODO like need the prefix here as well
@@ -229,19 +252,24 @@ rule link_burdens_test:
             for repeat in range(n_repeats) for bag in range(n_bags)
         ],
         dataset = 'cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/association_dataset_test.pkl',
-        config = 'cv_split{cv_split}/deeprvat/models/repeat_0/config.yaml' #TODO make this more generic
+        data_config = 'cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/hpopt_config.yaml',
+        model_config = 'cv_split{cv_split}/deeprvat/models/repeat_0/config.yaml',
     output:
         'cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/burdens_test/chunk{chunk}.linked'
     threads: 8
+    resources:
+        mem_mb = lambda wildcards: 16384,
+        load = lambda wildcards: 16000,
     shell:
         ' && '.join([
             ('deeprvat_associate compute-burdens '
              + debug +
              ' --n-chunks '+ str(n_burden_chunks) + ' '
-             f'--link-burdens ../../../{phenotypes[0]}/deeprvat/burdens/burdens.zarr '
+             f'--link-burdens ../../../{burden_phenotype}/deeprvat/burdens_test/burdens.zarr '
              '--chunk {wildcards.chunk} '
              '--dataset-file {input.dataset} '
-             '{input.config} '
+             '{input.data_config} '
+             '{input.model_config} '
              '{input.checkpoints} '
              'cv_split{wildcards.cv_split}/deeprvat/{wildcards.phenotype}/deeprvat/burdens_test'),
             'touch {output}'
@@ -255,10 +283,15 @@ rule compute_burdens_test:
             for repeat in range(n_repeats) for bag in range(n_bags)
         ],
         dataset = 'cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/association_dataset_test.pkl',
-        config = 'cv_split{cv_split}/deeprvat/models/repeat_0/config.yaml' #TODO make this more generic
+        data_config = 'cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/hpopt_config.yaml',
+        model_config = 'cv_split{cv_split}/deeprvat/models/repeat_0/config.yaml',
     output:
         'cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/burdens_test/chunk{chunk}.finished'
     threads: 8
+    resources:
+        mem_mb = 2000000,        # Using this value will tell our modified lsf.profile not to set a memory resource
+        load = 8000,
+        gpus = 1
     shell:
         ' && '.join([
             ('deeprvat_associate compute-burdens '
@@ -266,7 +299,8 @@ rule compute_burdens_test:
              ' --n-chunks '+ str(n_burden_chunks) + ' '
              '--chunk {wildcards.chunk} '
              '--dataset-file {input.dataset} '
-             '{input.config} '
+             '{input.data_config} '
+             '{input.model_config} '
              '{input.checkpoints} '
              'cv_split{wildcards.cv_split}/deeprvat/{wildcards.phenotype}/deeprvat/burdens_test'),
             'touch {output}'
@@ -276,33 +310,37 @@ rule compute_burdens_test:
 rule all_burdens_zarr:
     input:
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/chunk{c}.finished',
-                p = phenotypes[0], c = range(n_burden_chunks), cv_split=range(cv_splits)),
+                p = burden_phenotype, c = range(n_burden_chunks), cv_split=range(cv_splits)),
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/chunk{c}.linked',
-                p = [pheno for pheno in phenotypes_testing if pheno != phenotypes[0]],
+                p = [pheno for pheno in phenotypes_testing if pheno != burden_phenotype],
                  c = range(n_burden_chunks), cv_split=range(cv_splits)),        
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens/chunk{c}.finished',
-                p = phenotypes[0], c = range(n_burden_chunks), cv_split=range(cv_splits)),
+                p = burden_phenotype, c = range(n_burden_chunks), cv_split=range(cv_splits)),
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens/chunk{c}.linked',
-                p = [pheno for pheno in phenotypes_testing if pheno != phenotypes[0]],
+                p = [pheno for pheno in phenotypes_testing if pheno != burden_phenotype],
                  c = range(n_burden_chunks), cv_split=range(cv_splits)),
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing),
     output:
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/burdens.zarr',
-                p = phenotypes_testing[0], cv_split=range(cv_splits)),
+                p = burden_phenotype, cv_split=range(cv_splits)),
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens/burdens.zarr',
-                p = phenotypes_testing[0], cv_split=range(cv_splits)),
+                p = burden_phenotype, cv_split=range(cv_splits)),
+   
+
+rule all_alternative_burdens_zarr:
+    input:
+        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
+            cv_split=range(cv_splits),
+            btype = btypes,
+            phenotype = phenotypes_testing),
+    output:
         expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/burdens.zarr',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing),      
+            cv_split=range(cv_splits),
+            btype = btypes,
+            phenotype = phenotypes_testing),      
         expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/burdens.zarr',
                 cv_split=range(cv_splits),
                 btype = btypes,
-                phenotype = phenotypes_testing),      
-
+                phenotype = phenotypes_testing),     
 #
 ############################### Computation of alternative burdens ##############################################################
 ############################################################################################################################
@@ -349,7 +387,7 @@ rule compute_alt_burdens_burdens:
         config = lambda wildcards: 'cv_split{cv_split}/alternative_burdens/config.yaml' if wildcards.test_suffix == 'train' else 'cv_split{cv_split}/alternative_burdens/config_{test_suffix}.yaml',
         dataset = 'cv_split{cv_split}/alternative_burdens/{btype}/association_dataset_{test_suffix}.pkl'
     output:
-        'cv_split{cv_split}/alternative_burdens/{btype}/burdens_{test_suffix}/chunk{plofchunk}.finished'
+        'cv_split{cv_split}/alternative_burdens/{btype}/burdens_{test_suffix}/chunk{altchunk}.finished'
     params:
         prefix= '.'
     threads: 8
@@ -361,10 +399,10 @@ rule compute_alt_burdens_burdens:
         ' && '.join([
             conda_check,
             cuda_visible_devices,
-            (py_pipeline + 'alternative_burdens.py compute-plof-burdens '
+            (py_pipeline + 'alternative_burdens.py compute-alternative-burdens '
              + debug +
              ' --n-chunks '+ str(alt_burdens_chunks) + ' '
-             '--chunk {wildcards.plofchunk} '
+             '--chunk {wildcards.altchunk} '
              '--dataset-file {input.dataset} '
              '--btype {wildcards.btype} '
              '{input.config} '
@@ -375,8 +413,8 @@ rule compute_alt_burdens_burdens:
 
 rule move_alt_burdens_train_burdens:
     input:
-        expand('cv_split{{cv_split}}/alternative_burdens/{{btype}}/burdens_train/chunk{plofchunk}.finished',
-                plofchunk = range(alt_burdens_chunks))
+        expand('cv_split{{cv_split}}/alternative_burdens/{{btype}}/burdens_train/chunk{altchunk}.finished',
+                altchunk = range(alt_burdens_chunks))
     output:
        'cv_split{cv_split}/alternative_burdens/{btype}/burdens_train_moved.finished'
     shell:
@@ -389,24 +427,25 @@ rule link_all_alt_burdens_burdens:
     input:
         expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
                 cv_split=range(cv_splits),
-                plofchunk = range(alt_burdens_chunks),
+                altchunk = range(alt_burdens_chunks),
                 btype = btypes,
                 phenotype = phenotypes_testing),
  #uses x and y from deeprvat directory because there phentoype specific datasets have been created
 rule link_alt_burdens_burdens:
     input:
-        test_burdens = expand('cv_split{{cv_split}}/alternative_burdens/{{btype}}/burdens_test/chunk{plofchunk}.finished',
-                plofchunk = range(alt_burdens_chunks)),
+        test_burdens = expand('cv_split{{cv_split}}/alternative_burdens/{{btype}}/burdens_test/chunk{altchunk}.finished',
+                altchunk = range(alt_burdens_chunks)),
         train_burdens = 'cv_split{cv_split}/alternative_burdens/{btype}/burdens_train_moved.finished'
     output:
        finished_train = 'cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
        finished_test = 'cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/linking.finished',      
-
-
     params:
         link_path = 'cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/'
     shell:
         ' && '.join([
+            'rm -rf {params.link_path} ',
+            'mkdir -p {params.link_path}/burdens ',
+            'mkdir -p {params.link_path}/burdens_test ',
             'ln -rsf cv_split{wildcards.cv_split}/deeprvat/{wildcards.phenotype}/deeprvat/burdens/x.zarr {params.link_path}/burdens/x.zarr ',
             'ln -rsf cv_split{wildcards.cv_split}/deeprvat/{wildcards.phenotype}/deeprvat/burdens/y.zarr {params.link_path}/burdens/y.zarr ',
             'ln -rsf cv_split{wildcards.cv_split}/alternative_burdens/{wildcards.btype}/burdens/burdens.zarr {params.link_path}/burdens/burdens.zarr ',

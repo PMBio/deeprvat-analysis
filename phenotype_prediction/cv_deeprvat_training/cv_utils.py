@@ -3,7 +3,7 @@ import yaml
 import os
 import sys
 from typing import Optional
-
+import re
 # import pickle
 import logging
 import click
@@ -27,10 +27,11 @@ DATA_SLOT_DICT = {
 def cli():
     pass
 
-
+module_folder_dict = {'seed_genes' : 'baseline', 
+'deeprvat': 'deeprvat', 'alternative_burdens' : 'alternative_burdens'}
 @cli.command()
 @click.option("--module", "-m", multiple=True)
-@click.option("--rare-maf-col", type=str, default="combined_UKB_NFE_AF")
+# @click.option("--rare-maf-col", type=str, default="combined_UKB_NFE_AF")
 # @click.option('--split', type=str, default = 'train')
 @click.option("--fold", type=int)
 @click.option("--correction-method", type=str, default="FDR")
@@ -40,7 +41,7 @@ def cli():
 def spread_config(
     input_config,
     out_path,
-    rare_maf_col,
+    # rare_maf_col,
     module,
     fold,
     correction_method,
@@ -61,12 +62,19 @@ def spread_config(
             # data_slots = ['data', 'training_data'] if module == 'deeprvat' else ['data']
             data_slots = DATA_SLOT_DICT[module]
             for data_slot in data_slots:
+                annotations = config[module][data_slot]["dataset_config"]['annotations']
+                af_pattern = re.compile(r'.*(_MAF|_AF)\b')
+                rare_maf_col = [s for s in annotations if af_pattern.match(s)]
+                print(rare_maf_col)
+                assert len(rare_maf_col) == 1
+                rare_maf_col = rare_maf_col[0]
+                print(rare_maf_col)
                 config[module][data_slot][
                     "gt_file"
                 ] = f"cv_data/genotypes_{split}{fold}.h5"
                 config[module][data_slot]["dataset_config"][
                     "phenotype_file"
-                ] = f"cv_data/phenotypes_{split}{fold}_phenotypes.parquet"
+                ] = f"cv_data/genotypes_{split}{fold}_phenotypes.parquet"
                 # if module == 'baseline':
                 #     config[module]['rare_maf'] = association_maf
                 if (module == "deeprvat") | (module == "deeprvat_pretrained"):
@@ -90,7 +98,7 @@ def spread_config(
                     logger.info("Writing baseline directories")
                     baseline_base_path = f"{os.getcwd()}/cv_split{fold}/baseline"
                     logger.info(f'Setting baseline path to {baseline_base_path}')
-                    config["baseline_results"] = [
+                    config[module]["baseline_results"] = [
                         {"base": baseline_base_path, "type": test_name}
                         for test_name in [
                             "plof/burden",
@@ -99,10 +107,10 @@ def spread_config(
                             "missense/skat",
                         ]
                     ]
-                    logger.info(config["baseline_results"])
+                    logger.info(config[module]["baseline_results"])
             logger.info(f"Writing config for module {module}")
             split_suffix = "_test" if split == "test" else ""
-            with open(f"{out_path}/{module}/config{split_suffix}.yaml", "w") as f:
+            with open(f"{out_path}/{module_folder_dict[module]}/config{split_suffix}.yaml", "w") as f:
                 yaml.dump(config[module], f)
 
 
@@ -119,7 +127,7 @@ def generate_test_config(input_config, out_file, module, fold):
         config[data_slot]["gt_file"] = f"cv_data/genotypes_{split}{fold}.h5"
         config[data_slot]["dataset_config"][
             "phenotype_file"
-        ] = f"cv_data/phenotypes_{split}{fold}_phenotypes.parquet"
+        ] = f"cv_data/genotypes_{split}{fold}_phenotypes.parquet"
     with open(out_file, "w") as f:
         yaml.dump(config, f)
 
