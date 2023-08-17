@@ -34,6 +34,7 @@ alt_burdens_chunks = 30
 repeats_to_compare = [6]
 phenotypes = config['phenotypes']
 phenotypes = phenotypes.keys() if type(phenotypes) == dict else phenotypes
+phenotypes_testing = phenotypes
 burden_phenotype = phenotypes_testing[0]
 
 
@@ -74,18 +75,18 @@ rule all:
                  c = range(n_burden_chunks), cv_split=range(cv_splits)),
         expand('cv_split{cv_split}/baseline/{p}/eval/burden_associations.parquet',
                 p = phenotypes_testing, cv_split=range(cv_splits)),
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/burdens.zarr',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing),      
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/burdens.zarr',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing), 
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing),
+        # expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/burdens.zarr',
+        #         cv_split=range(cv_splits),
+        #         btype = btypes,
+        #         phenotype = phenotypes_testing),      
+        # expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/burdens.zarr',
+        #         cv_split=range(cv_splits),
+        #         btype = btypes,
+        #         phenotype = phenotypes_testing), 
+        # expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
+        #         cv_split=range(cv_splits),
+        #         btype = btypes,
+        #         phenotype = phenotypes_testing),
 
 
 rule spread_config:
