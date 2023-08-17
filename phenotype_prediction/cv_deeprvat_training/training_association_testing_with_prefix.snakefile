@@ -213,14 +213,19 @@ rule reverse_models:
     input:
         checkpoints = expand('models/repeat_{repeat}/best/bag_{bag}.ckpt',
                              bag=range(n_bags), repeat=range(n_repeats)),
-        config = 'models/repeat_0/config.yaml/', 
+        model_config = 'models/config.yaml',
+        data_config = Path(phenotypes[0]) / "deeprvat/hpopt_config.yaml",
     output:
         "models/reverse_finished.tmp"
     threads: 4
+    resources:
+        mem_mb = 20480,
+        load = 20480
     shell:
         " && ".join([
             ("deeprvat_associate reverse-models "
-             "{input.config} "
+             "{input.model_config} "
+             "{input.data_config} "
              "{input.checkpoints}"),
             "touch {output}"
         ])
@@ -229,8 +234,17 @@ rule all_training:
     input:
         expand('models/repeat_{repeat}/best/bag_{bag}.ckpt',
                bag=range(n_bags), repeat=range(n_repeats)),
-        expand('models/repeat_{repeat}/config.yaml',
-               repeat=range(n_repeats))
+        "models/config.yaml"
+
+
+rule link_config:
+    input:
+        'models/repeat_0/config.yaml'
+    output:
+        "models/config.yaml"
+    threads: 1
+    shell:
+        "ln -rfs {input} {output}"
 
 rule best_training_run:
     input:

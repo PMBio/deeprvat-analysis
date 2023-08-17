@@ -278,6 +278,7 @@ rule link_burdens_test:
 rule compute_burdens_test:
     priority: 10
     input:
+        reversed = "cv_split{cv_split}/deeprvat/models/reverse_finished.tmp",
         checkpoints = lambda wildcards: [
             f'cv_split{{cv_split}}/deeprvat/models/repeat_{repeat}/best/bag_{bag}.ckpt'
             for repeat in range(n_repeats) for bag in range(n_bags)
