@@ -277,14 +277,14 @@ rule train:
              f"{p}/deeprvat/covariates.zarr "
              f"{p}/deeprvat/y.zarr"
              for p in phenotypes]),
-        prefix = '.'
+        prefix = '.',
     shell:
         ' && '.join([
             'deeprvat_train train '
             + debug +
             '--trial-id {wildcards.trial_number} '
             "{params.phenotypes} "
-            'config.yaml '
+            '{input.config[0]} '
             '{params.prefix}/models/repeat_{wildcards.repeat}/trial{wildcards.trial_number} '
             '{params.prefix}/models/repeat_{wildcards.repeat}/hyperparameter_optimization.db',
             'touch {output.finished}'
