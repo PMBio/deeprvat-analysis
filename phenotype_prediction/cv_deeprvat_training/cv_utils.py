@@ -31,8 +31,6 @@ module_folder_dict = {'seed_genes' : 'baseline',
 'deeprvat': 'deeprvat', 'alternative_burdens' : 'alternative_burdens'}
 @cli.command()
 @click.option("--module", "-m", multiple=True)
-# @click.option("--rare-maf-col", type=str, default="combined_UKB_NFE_AF")
-# @click.option('--split', type=str, default = 'train')
 @click.option("--fold", type=int)
 @click.option("--correction-method", type=str, default="FDR")
 @click.option("--n-training-genes", type=int, default=40)
@@ -41,7 +39,6 @@ module_folder_dict = {'seed_genes' : 'baseline',
 def spread_config(
     input_config,
     out_path,
-    # rare_maf_col,
     module,
     fold,
     correction_method,
