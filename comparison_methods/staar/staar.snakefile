@@ -20,7 +20,6 @@ pipeline_dir = f'{DEEPRVAT_ANALYSIS_DIR}/comparison_methods/staar/'
 py_pipeline = f'python {pipeline_dir}'
 r = f"Rscript {pipeline_dir}"
 
-
 wildcard_constraints:
     repeat="\d+",
     chunk="\d+",
@@ -33,10 +32,56 @@ masks = [
     "plof_disruptive_missense",
     "synonymous",
 ]
+OLD_PHENOTYPES = [
+    "Apolipoprotein_A",
+    "Apolipoprotein_B",
+    "Calcium",
+    "Cholesterol",
+    "HDL_cholesterol",
+    "IGF_1",
+    "LDL_direct",
+    "SHBG",
+    "Total_bilirubin",
+    "Triglycerides",
+    "Urate",
+    "Mean_corpuscular_volume",
+    "Platelet_count",
+    "Mean_platelet_thrombocyte_volume",
+    "Platelet_crit",
+    "Standing_height",
+    "Mean_reticulocyte_volume",
+    "Platelet_distribution_width",
+    "Lymphocyte_percentage",
+    "Neutrophill_count",
+    "Red_blood_cell_erythrocyte_count",
+]
+NEW_PHENOTYPES = [
+  "Body_mass_index_BMI",
+  "Glucose",
+  "Vitamin_D",
+  "Albumin",
+  "Total_protein",
+  "Cystatin_C",
+  "Gamma_glutamyltransferase",
+  "Alkaline_phosphatase",
+  "Creatinine",
+  "Whole_body_fat_free_mass", 
+  "Forced_expiratory_volume_in_1_second_FEV1",
+  "QTC_interval",
+  "Glycated_haemoglobin_HbA1c",
+  "WHR",
+  "WHR_Body_mass_index_BMI_corrected"
+]
+
+phenotypes_eval_dict = {'all_phenotypes':[OLD_PHENOTYPES, NEW_PHENOTYPES],
+                    'new_phenotypes':NEW_PHENOTYPES}
+
+# phenotypes = ['CAD_HARD', 'CAD_SOFT', 'Jurgens_Hypercholesterolemia', 'Jurgens_Hypothyroidism']
 
 rule all:
     input:
-        'replication_staar.Rds'
+        expand('replication_staar_{key}.Rds',
+                    key = phenotypes_eval_dict.keys())
 
 rule replication:
     conda:
@@ -44,23 +89,37 @@ rule replication:
     input:
         expand(
             "{phenotype}/{mask}/results/burden_associations.parquet",
-            phenotype=phenotypes,
+            phenotype=NEW_PHENOTYPES,
+            mask=masks,
+        ),
+        expand(
+            "{phenotype}/{mask}/results/burden_associations_testing.parquet",
+            phenotype=OLD_PHENOTYPES,
             mask=masks,
         ),
     output:
-        out_path="replication_staar.Rds",
+        out_path="replication_staar_{key}.Rds",
     params:
         code_dir=pipeline_dir,
-        phenotypes=phenotypes,
+        phenotypes=lambda wildcards: phenotypes_eval_dict[wildcards.key],
         masks=masks,
+        phenotype_suffix='_{key}'
     threads: 1
     resources:
-        mem_mb=16000,
+        mem_mb=32000,
         load=16000,
     script:
         f"{pipeline_dir}/staar_replication.R"
 
-
+rule all_regression:
+    priority: 100
+    input:
+        expand(
+            "{phenotype}/{mask}/results/burden_associations.parquet",
+            phenotype=phenotypes,
+            mask=masks,
+            # chunk=range(n_chunks),
+        ),
 
 rule combine_regression_chunks:
     conda:
@@ -82,15 +141,7 @@ rule combine_regression_chunks:
         )
 
 
-rule all_regression_results:
-    priority: 100
-    input:
-        expand(
-            "{phenotype}/{mask}/results/burden_associations_chunk{chunk}.Rds",
-            phenotype=phenotypes,
-            mask=masks,
-            chunk=range(n_chunks),
-        ),
+
 
 
 rule regress:
@@ -106,7 +157,7 @@ rule regress:
         temp("{phenotype}/{mask}/results/burden_associations_chunk{chunk}.Rds"),
     threads: 4
     resources:
-        # mem_mb = 16000,
+        # mem_mb = 10000,
         mem_mb=lambda wildcards, attempt: 16000 * 1 * (attempt + 1),
         load=32000,
     shell:
@@ -162,7 +213,7 @@ rule build_data:
     threads: 4
     priority: 30
     resources:
-        mem_mb=32000,
+        mem_mb=28000,
         disk_mb=8000,
         load=64000,
     shell:
@@ -170,7 +221,7 @@ rule build_data:
         [
             conda_check,
             (
-                py
+                py_pipeline
         + "staar_data.py build-data "
                     + debug
                     + " --n-chunks "
@@ -220,7 +271,7 @@ rule association_dataset:
         [
             conda_check,
             (
-                py
+                py_pipeline
         + "staar_data.py make-dataset "
                     + debug
                     + "--pickled-dataset-file {output.pickled} "  # outputs/dataset
@@ -246,7 +297,7 @@ rule config:
         [
             conda_check,
             (
-                py
+                py_pipeline
         + "staar_data.py update-config "
                     + "--phenotype {wildcards.phenotype} "
                     + "--variant-type {wildcards.mask} "

@@ -28,10 +28,53 @@ conda_check = 'conda info | grep "active environment"'
 wildcard_constraints:
     repeat="\d+",
 
+OLD_PHENOTYPES = [
+    "Apolipoprotein_A",
+    "Apolipoprotein_B",
+    "Calcium",
+    "Cholesterol",
+    "HDL_cholesterol",
+    "IGF_1",
+    "LDL_direct",
+    "SHBG",
+    "Total_bilirubin",
+    "Triglycerides",
+    "Urate",
+    "Mean_corpuscular_volume",
+    "Platelet_count",
+    "Mean_platelet_thrombocyte_volume",
+    "Platelet_crit",
+    "Standing_height",
+    "Mean_reticulocyte_volume",
+    "Platelet_distribution_width",
+    "Lymphocyte_percentage",
+    "Neutrophill_count",
+    "Red_blood_cell_erythrocyte_count",
+]
+NEW_PHENOTYPES = [
+  "Body_mass_index_BMI",
+  "Glucose",
+  "Vitamin_D",
+  "Albumin",
+  "Total_protein",
+  "Cystatin_C",
+  "Gamma_glutamyltransferase",
+  "Alkaline_phosphatase",
+  "Creatinine",
+  "Whole_body_fat_free_mass", 
+  "Forced_expiratory_volume_in_1_second_FEV1",
+  "QTC_interval",
+  "Glycated_haemoglobin_HbA1c",
+  "WHR",
+  "WHR_Body_mass_index_BMI_corrected"
+]
 
+phenotypes_eval_dict = {'all_phenotypes':[OLD_PHENOTYPES, NEW_PHENOTYPES],
+                    'new_phenotypes':NEW_PHENOTYPES}
 rule all:
     input:
-        'replication_monti.Rds'
+        expand('replication_monti_{key}.Rds',
+                    key = phenotypes_eval_dict.keys())
 
 rule replication:
     conda:
@@ -39,19 +82,25 @@ rule replication:
     input:
         expand(
             "{phenotype}/eval/postprocessed_associations.parquet",
-            phenotype=phenotypes,
+            phenotype=NEW_PHENOTYPES,
+        ),
+        expand(
+            "{phenotype}/eval/postprocessed_associations_testing.parquet",
+            phenotype=OLD_PHENOTYPES,
         ),
     output:
-        out_path="replication_monti.Rds",
+        out_path="replication_monti_{key}.Rds",
     params:
         code_dir=pipeline_dir,
-        phenotypes=phenotypes
+        phenotypes=lambda wildcards: phenotypes_eval_dict[wildcards.key],
+        phenotype_suffix='_{key}'
     threads: 1
     resources:
         mem_mb=16000,
         load=16000,
     script:
         f"{pipeline_dir}/monti_replication.R"
+
 
 rule postprocess_results:
     conda:
