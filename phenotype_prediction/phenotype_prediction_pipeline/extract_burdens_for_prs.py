@@ -9,7 +9,7 @@ import click
 import yaml
 import zarr
 import numpy as np
-
+from prs_comparison import PHENOTYPE_MAPPING
 logging.basicConfig(
     format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s",
     level="INFO",
@@ -96,9 +96,28 @@ def extract_burdens(
 
 @cli.command()
 @click.option("--sig-file", type=click.Path(exists=True), multiple=True)
+@click.option("--train-pheno", multiple=True)
 @click.argument("out-file", type=click.Path())
-def combine_significant(sig_file, out_file):
+def combine_significant(sig_file, train_pheno, out_file):
     all_discoveries = pd.concat([pd.read_parquet(file) for file in sig_file])
+    discovery_list = []
+    for pheno in all_discoveries['phenotype'].unique():
+        if pheno in train_pheno:
+            logger.info(f'Using DeepRVAT with seed genes as DeepRVAT for pheno {pheno}')
+            this_deeprvat = all_discoveries.query("phenotype == @pheno & Method == 'DeepRVAT'")
+        else:
+            logger.info(f'Using DeepRVAT without seed genes as DeepRVAT for pheno {pheno}')
+            this_deeprvat = all_discoveries.query("phenotype == @pheno & Method == 'DeepRVAT wo baseline'")
+            this_deeprvat['Method'] = 'DeepRVAT'
+        discovery_list.append(this_deeprvat)
+    baseline_discoveries = all_discoveries.query("Method not in ['DeepRVAT', 'DeepRVAT wo baseline']")
+    discovery_list.append(baseline_discoveries)
+    all_discoveries = pd.concat(discovery_list).rename(columns={'phenotype':'Trait'})
+    this_pheno_mapping = dict(zip([i.replace('_', ' ') for i in PHENOTYPE_MAPPING.keys()], 
+        PHENOTYPE_MAPPING.values()))
+    all_discoveries['Trait'] =  all_discoveries["Trait"].replace(this_pheno_mapping)
+    logger.info(f"Number of discoveries:  {all_discoveries.groupby(['Trait', 'Method']).size()}")
+
     all_discoveries.to_parquet(out_file)
 
 

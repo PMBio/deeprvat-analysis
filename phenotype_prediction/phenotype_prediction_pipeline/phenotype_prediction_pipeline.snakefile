@@ -1,4 +1,5 @@
 from snakemake.utils import Paramspace
+from snakemake.utils import Paramspace
 from snakemake.utils import min_version
 import copy
 import os

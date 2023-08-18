@@ -32,7 +32,8 @@ PHENOTYPE_MAPPING = {
 
 def load_prs(prs_id, prs_file):
     logger.info(f"Retrieving prs from {prs_file} using PRS id {prs_id}")
-    prs_df = pd.read_parquet(prs_file, sep="\t")[[prs_id]].to_frame()
+    prs_df = pd.read_parquet(prs_file)[[prs_id]]
+    prs_df.columns = ['common_PRS']
     return prs_df
 
 
@@ -48,7 +49,6 @@ def compare_with_baseline_studies(
         if phenotype in PHENOTYPE_MAPPING.keys()
         else " ".join(phenotype.split("_"))
     )
-
     logger.info(phenotype)
     genes_deeprvat_new = set(
         discoveries.query(
@@ -64,7 +64,12 @@ def compare_with_baseline_studies(
             "gene"
         ]
     )
-
+    if len(genes_baseline) == 0:
+        top_n_genes = 3
+        top_n_genes = min(len(genes_deeprvat_all), top_n_genes)
+        logger.info(f'Using top {top_n_genes} of DeepRVAT discoveries for baseline because there were no baseline discoveries')
+        genes_baseline = set(discoveries.query('Trait == @phenotype & Method == "DeepRVAT"')\
+            .sort_values('pval')['gene'].drop_duplicates().head(top_n_genes))
     gene_dict = {
         "deeprvat_discoveries": genes_deeprvat_all,
         "deeprvat_novel": genes_deeprvat_new,
@@ -79,7 +84,6 @@ def compare_with_baseline_studies(
             )["gene"]
         )
         gene_dict["deeprvat_all_samples"] = genes_deeprvat_all_samples
-
     logger.info(
         f"Number of baseline discoveries: {len(genes_baseline)} \n Number of DeepRVAT discoveries: {len(genes_deeprvat_all)} \n Number of Novel DeepRVAT discoveries: {len(genes_deeprvat_new)}"
     )

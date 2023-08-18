@@ -233,6 +233,7 @@ def prep_r_regression_data(
     logger.info(f"Using PRS id {prs_id}")
     prs_df = load_prs(prs_id, config.get("prs_file"))
     logger.info(prs_df)
+
     ### Define phenotype df
     _, this_phenotype_df = add_corrected_phenotype_cols(phenotype, phenotype_df, prs_df)
 
@@ -242,7 +243,6 @@ def prep_r_regression_data(
     genes_this_pheno = compare_with_baseline_studies(
         phenotype,
         discoveries,
-        genebass_discoveries_file=config.get("genebass_discoveries_file"),
     )
 
     logger.info("Loading burdens")
@@ -262,7 +262,6 @@ def prep_r_regression_data(
     indices_dict = {}
     for split in splits:
         indices_dict[split] = get_sample_indices(dataset_dir, phenotype, split, prs_df)
-
     assert (
         indices_dict["train"]["sample_mask"].shape[0]
         == burdens_dict["train"]["deeprvat"][
