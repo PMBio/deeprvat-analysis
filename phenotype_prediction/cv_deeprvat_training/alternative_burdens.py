@@ -147,10 +147,10 @@ def make_dataset(
 
 
 
-def get_plof_burden(
-    batch: Dict, plof_idx: np.ndarray, btype: str
+def get_burden(
+    batch: Dict, burden_idx: np.ndarray, btype: str
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    genotypes = np.array(batch["rare_variant_annotations"][:, :, plof_idx, :])
+    genotypes = np.array(batch["rare_variant_annotations"][:, :, burden_idx, :])
     logger.info(genotypes.shape)
     # assert set(np.unique(genotypes)) == set([0,1])
     logger.info(f"genotypes shape: {genotypes.shape}")
@@ -160,7 +160,7 @@ def get_plof_burden(
     logger.info(f"burdens after summing shape: {burdens.shape}")
     if btype == "plof":
         burdens[burdens > 0] = 1
-    burdens = np.max(burdens, axis=2)  # sum plof variants for each gene
+    burdens = np.max(burdens, axis=2)  # sum burden variants for each gene
     logger.info(f"burdens after maxing shape: {burdens.shape}")
     y = batch["y"]
     x = batch["x_phenotypes"]
@@ -178,7 +178,7 @@ def compute_alternative_burdens_(
     chunk: Optional[int] = None,
 ) -> Tuple[np.ndarray, zarr.core.Array, zarr.core.Array, zarr.core.Array]:
     try:
-        data_config = config["plof_data"]
+        data_config = config["alt_burdens_data"]
     except:
         data_config = config["data"]
 
@@ -191,17 +191,17 @@ def compute_alternative_burdens_(
         #             'frameshift_variant', 'stop_gained', 'stop_lost', 'start_lost')]
         logger.info(f"rare annotations: {ds_full.rare_embedding.annotations}")
         if "is_plof" not in ds_full.rare_embedding.annotations:
-            plof_idx = [
+            burden_idx = [
                 ds_full.rare_embedding.annotations.index(c) for c in PLOF_CONSEQUENCES
             ]
         else:
-            plof_idx = [ds_full.rare_embedding.annotations.index("is_plof")]
+            burden_idx = [ds_full.rare_embedding.annotations.index("is_plof")]
     else:
         annotation_btype = (
             BTYPES_DICT_rev[btype] if btype in list(BTYPES_DICT_rev.keys()) else btype
         )
-        plof_idx = [ds_full.rare_embedding.annotations.index(annotation_btype)]
-    logger.info(f"plof_idx {plof_idx}")
+        burden_idx = [ds_full.rare_embedding.annotations.index(annotation_btype)]
+    logger.info(f"burden_idx {burden_idx}")
     if chunk is not None:
         if n_chunks is None:
             raise ValueError("n_chunks must be specified if chunk is not None")
@@ -239,7 +239,7 @@ def compute_alternative_burdens_(
     )
 
     batch = next(iter(dl))
-    this_burdens, this_y, this_x = get_plof_burden(batch, plof_idx, btype)
+    this_burdens, this_y, this_x = get_burden(batch, burden_idx, btype)
 
     logger.info("Saving to zarr files")
     burdens = zarr.open(
