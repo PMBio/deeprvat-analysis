@@ -2,6 +2,7 @@ library(dplyr)
 library(logger)
 library(purrr)
 library(stringr)
+library(yardstick)
 
 ## params to specify #####
 
@@ -19,6 +20,44 @@ phenotypes <- phenotypes[dir.exists(paste0(logistic_model_res_path, "/", phenoty
 log_info("Analysing {length(phenotypes)} phenotypes")
 
 
+
+##########################################
+##########################################
+
+
+GetRankedMetrics <- function(combined_res_ranked, fdr_rank_name = 'rank'){
+  
+  recomputeMetrics <- function(this_res, group_info){
+    top_bottom_q = group_info$extreme_direction
+    decision_threshold = 0.5
+    estimate = this_res[['estimate']]
+    Y = this_res[['Y']]#unique(this_res$top_q)
+    
+    if (top_bottom_q == 'topq'){
+      thres = quantile(Y, 1-unique(group_info$top_quantile))
+      truth = as.integer(Y > thres)
+    }else{
+      thres = quantile(Y, unique(group_info$top_quantile))
+      truth = as.integer(Y < thres)
+    }
+    fitted_results_bin <- ifelse(estimate > decision_threshold,1,0)
+    this_res_new = tibble(estimate = estimate,
+                          estimate_bin = as.factor(fitted_results_bin), 
+                          truth = as.factor(truth),
+                          Y = Y)
+    
+    class_and_probs_metrics <- metric_set(roc_auc, pr_auc, accuracy, f_meas)
+    this_metrics = this_res_new %>% class_and_probs_metrics(truth, estimate,
+                                                            estimate = estimate_bin, 
+                                                            event_level = 'second')
+    return(cbind(this_metrics, group_info))
+  }
+  
+  combined_metrics_list = combined_res_ranked %>% group_by(across(all_of(fdr_rank_name)), model_name, phenotype_col, top_quantile, extreme_direction) %>%
+    group_map(recomputeMetrics)
+  combined_metrics = do.call(rbind, combined_metrics_list) 
+  return(combined_metrics)
+}
 
 combineModelResults <- function(phenotype, phenotype_suffix = NULL, top_q = NULL, fdr = 0.05, model_res_dir, use_rank = TRUE, top_bottom_q = "topq") {
     fdr_rank_name = ifelse(use_rank, "rank", "fdr")

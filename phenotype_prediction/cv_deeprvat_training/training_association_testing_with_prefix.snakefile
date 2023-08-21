@@ -6,7 +6,7 @@ configfile: 'config.yaml'
 debug_flag = config.get('debug', False)
 phenotypes = config['phenotypes']
 phenotypes = phenotypes.keys() if type(phenotypes) == dict else phenotypes
-
+burden_phenotype = phenotypes[0]
 if type(phenotypes) == dict:
     training_phenotypes = {p: config['phenotypes'][p].get('training_phenotype', p)
                         for p in phenotypes}
@@ -49,11 +49,15 @@ rule evaluate:
         "{phenotype}/deeprvat/eval/all_results.parquet"
     threads: 1
     params:
-        prefix = '.'
+        prefix = '.',
+        use_seed_genes = '--use-seed-genes'
+    resources:
+        mem_mb = 4098
     shell:
         'deeprvat_evaluate '
         + debug +
-        '--use-seed-genes '
+        '{params.use_seed_genes} '
+        # '--use-seed-genes '
         '--n-repeats {n_repeats} '
         '--correction-method FDR '
         '{input.associations} '
@@ -82,11 +86,11 @@ rule regress:
         config = "{phenotype}/deeprvat/hpopt_config.yaml",
         chunks = lambda wildcards: expand(
             ('{{phenotype}}/deeprvat/burdens/chunk{chunk}.' +
-             ("finished" if wildcards.phenotype == phenotypes[0] else "linked")),
+             ("finished" if wildcards.phenotype == burden_phenotype else "linked")),
             chunk=range(n_burden_chunks)
         ),
         phenotype_0_chunks =  expand(
-            phenotypes[0] + '/deeprvat/burdens/chunk{chunk}.finished',
+            burden_phenotype + '/deeprvat/burdens/chunk{chunk}.finished',
             chunk=range(n_burden_chunks)
         ),
     params:
@@ -113,7 +117,7 @@ rule all_burdens:
     input:
         [
             (f'{p}/deeprvat/burdens/chunk{c}.' +
-             ("finished" if p == phenotypes[0] else "linked"))
+             ("finished" if p == burden_phenotype else "linked"))
             for p in phenotypes
             for c in range(n_burden_chunks)
         ]
@@ -126,21 +130,26 @@ rule link_burdens:
             for repeat in range(n_repeats) for bag in range(n_bags)
         ],
         dataset = '{phenotype}/deeprvat/association_dataset.pkl',
-        config = 'models/repeat_0/config.yaml'
+        data_config = '{phenotype}/deeprvat/hpopt_config.yaml',
+        model_config = 'models/repeat_0/config.yaml',
     output:
         '{phenotype}/deeprvat/burdens/chunk{chunk}.linked'
     params:
         prefix = '.'
+    resources:
+        mem_mb = lambda wildcards: 16384,
+        load = lambda wildcards: 16000,
     threads: 8
     shell:
         ' && '.join([
             ('deeprvat_associate compute-burdens '
              + debug +
              ' --n-chunks '+ str(n_burden_chunks) + ' '
-             f'--link-burdens ../../../{phenotypes[0]}/deeprvat/burdens/burdens.zarr '
+             f'--link-burdens ../../../{burden_phenotype}/deeprvat/burdens/burdens.zarr '
              '--chunk {wildcards.chunk} '
              '--dataset-file {input.dataset} '
-             '{input.config} '
+             '{input.data_config} '
+             '{input.model_config} '
              '{input.checkpoints} '
              '{params.prefix}/{wildcards.phenotype}/deeprvat/burdens'),
             'touch {output}'
@@ -155,7 +164,8 @@ rule compute_burdens:
             for repeat in range(n_repeats) for bag in range(n_bags)
         ],
         dataset = '{phenotype}/deeprvat/association_dataset.pkl',
-        config = 'models/repeat_0/config.yaml'
+        data_config = '{phenotype}/deeprvat/hpopt_config.yaml',
+        model_config = 'models/repeat_0/config.yaml',
     output:
         '{phenotype}/deeprvat/burdens/chunk{chunk}.finished'
     params:
@@ -172,7 +182,8 @@ rule compute_burdens:
              ' --n-chunks '+ str(n_burden_chunks) + ' '
              '--chunk {wildcards.chunk} '
              '--dataset-file {input.dataset} '
-             '{input.config} '
+             '{input.data_config} '
+             '{input.model_config} '
              '{input.checkpoints} '
              '{params.prefix}/{wildcards.phenotype}/deeprvat/burdens'),
             'touch {output}'
@@ -202,14 +213,19 @@ rule reverse_models:
     input:
         checkpoints = expand('models/repeat_{repeat}/best/bag_{bag}.ckpt',
                              bag=range(n_bags), repeat=range(n_repeats)),
-        config = 'models/repeat_0/config.yaml/', 
+        model_config = 'models/config.yaml',
+        data_config = Path(phenotypes[0]) / "deeprvat/hpopt_config.yaml",
     output:
         "models/reverse_finished.tmp"
     threads: 4
+    resources:
+        mem_mb = 20480,
+        load = 20480
     shell:
         " && ".join([
             ("deeprvat_associate reverse-models "
-             "{input.config} "
+             "{input.model_config} "
+             "{input.data_config} "
              "{input.checkpoints}"),
             "touch {output}"
         ])
@@ -218,8 +234,17 @@ rule all_training:
     input:
         expand('models/repeat_{repeat}/best/bag_{bag}.ckpt',
                bag=range(n_bags), repeat=range(n_repeats)),
-        expand('models/repeat_{repeat}/config.yaml',
-               repeat=range(n_repeats))
+        "models/config.yaml"
+
+
+rule link_config:
+    input:
+        'models/repeat_0/config.yaml'
+    output:
+        "models/config.yaml"
+    threads: 1
+    shell:
+        "ln -rfs {input} {output}"
 
 rule best_training_run:
     input:
@@ -266,14 +291,14 @@ rule train:
              f"{p}/deeprvat/covariates.zarr "
              f"{p}/deeprvat/y.zarr"
              for p in phenotypes]),
-        prefix = '.'
+        prefix = '.',
     shell:
         ' && '.join([
             'deeprvat_train train '
             + debug +
             '--trial-id {wildcards.trial_number} '
             "{params.phenotypes} "
-            'config.yaml '
+            '{input.config[0]} '
             '{params.prefix}/models/repeat_{wildcards.repeat}/trial{wildcards.trial_number} '
             '{params.prefix}/models/repeat_{wildcards.repeat}/hyperparameter_optimization.db',
             'touch {output.finished}'
