@@ -29,7 +29,7 @@ py_deeprvat = f'python {DEEPRVAT_DIR}/deeprvat'
 wildcard_constraints:
     repeat="\d+"
 
-cv_splits = 5
+cv_splits = 5 #todo undo this
 alt_burdens_chunks = 30
 repeats_to_compare = [6]
 phenotypes = config['phenotypes']
@@ -59,32 +59,20 @@ btypes = list(set(btypes) - set(PLOF_CONSEQUENCES))
 btypes = [BTYPES_DICT[btype] if btype in BTYPES_DICT else btype for btype in btypes]
 btypes.append('plof')
 
-
 rule all:
     input:
         expand("cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/eval/significant.parquet",
                cv_split = range(cv_splits), phenotype=phenotypes_testing),
         expand("cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/eval/all_results.parquet",
                cv_split = range(cv_splits), phenotype=phenotypes_testing),
-        expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/burdens.zarr',
-                p = phenotypes_testing[0], cv_split=range(cv_splits)),
-        expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens/burdens.zarr',
-                p = phenotypes_testing[0], cv_split=range(cv_splits)),
-        expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/chunk{c}.linked',
-                p = [pheno for pheno in phenotypes_testing if pheno != burden_phenotype],
-                 c = range(n_burden_chunks), cv_split=range(cv_splits)),
+        expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/{b_dir}/burdens_zarr.created',
+                p = burden_phenotype, cv_split=range(cv_splits),
+                b_dir=['burdens', 'burdens_test']),
         expand('cv_split{cv_split}/baseline/{p}/eval/burden_associations.parquet',
                 p = phenotypes_testing, cv_split=range(cv_splits)),
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/burdens.zarr',
+        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/{b_dir}/burdens_zarr.created',
                 cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing),      
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/burdens.zarr',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing), 
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
-                cv_split=range(cv_splits),
+                b_dir=['burdens', 'burdens_test'],
                 btype = btypes,
                 phenotype = phenotypes_testing),
 
@@ -321,28 +309,18 @@ rule all_burdens_zarr:
                 p = [pheno for pheno in phenotypes_testing if pheno != burden_phenotype],
                  c = range(n_burden_chunks), cv_split=range(cv_splits)),
     output:
-        expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/burdens.zarr',
-                p = burden_phenotype, cv_split=range(cv_splits)),
-        expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens/burdens.zarr',
-                p = burden_phenotype, cv_split=range(cv_splits)),
-   
+        burdens_test = expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/burdens_zarr.created',
+                p = phenotypes_testing, cv_split=range(cv_splits)),
+        burdens = expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens/burdens_zarr.created',
+                p = phenotypes_testing, cv_split=range(cv_splits)),
+    shell:
+        ' && '.join([
+            'touch {output.burdens_test}' ,
+            'touch {output.burdens}' 
+        ])
 
-rule all_alternative_burdens_zarr:
-    input:
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
-            cv_split=range(cv_splits),
-            btype = btypes,
-            phenotype = phenotypes_testing),
-    output:
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/burdens.zarr',
-            cv_split=range(cv_splits),
-            btype = btypes,
-            phenotype = phenotypes_testing),      
-        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/burdens.zarr',
-                cv_split=range(cv_splits),
-                btype = btypes,
-                phenotype = phenotypes_testing),     
-#
+
+
 ############################### Computation of alternative burdens ##############################################################
 ############################################################################################################################
 
@@ -461,4 +439,19 @@ rule link_alt_burdens_burdens:
             'touch {output.finished_test}' 
         ])
 
-
+rule all_alternative_burdens_zarr:
+    input:
+        expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/linking.finished',
+            cv_split=range(cv_splits),
+            btype = btypes,
+            phenotype = phenotypes_testing),
+    output:
+        burdens = expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens/burdens_zarr.created',
+                phenotype = phenotypes_testing, cv_split=range(cv_splits),btype = btypes),
+        burdens_test = expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/burdens_test/burdens_zarr.created',
+                phenotype = phenotypes_testing, cv_split=range(cv_splits),btype = btypes),
+    shell:
+        ' && '.join([
+            'touch {output.burdens_test}' ,
+            'touch {output.burdens}' 
+        ])

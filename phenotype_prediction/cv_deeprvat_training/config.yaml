@@ -509,7 +509,6 @@ alternative_burdens:
                         - sift_score
                         - polyphen_score
                         - SpliceAI_delta_score
-                        - AbSplice_DNA
                     thresholds:
                         UKB_AF:  "UKB_AF < 1e-3 and UKB_AF > 0" #is updated automatically when updating the config with update_config
                         # is_plof: "is_plof == 1"
