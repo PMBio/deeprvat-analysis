@@ -172,6 +172,9 @@ def get_sample_indices(dataset_dir, phenotype, split, prs_df):
 def cli():
     pass
 
+def find_substring_position(substring, string_list):
+    matches = [index for index, string in enumerate(string_list) if substring in string]
+    return matches[0] if matches else -1
 
 @cli.command()
 @click.option("--result-dir", type=click.Path(exists=True), default="./")
@@ -201,9 +204,10 @@ def prep_r_regression_data(
     logger.info(f"preparing input data for burden types {burden_types}")
     phenotype = phenotype.replace("_standardized", "")
     logger.info(f"Preparing data for phenotype: {phenotype}")
-    prs_mapper = pd.read_csv(config.get("prs_pheno_map"))
+    prs_mapper = pd.read_csv(config.get("prs_pheno_map"), header = None)
 
-    PRS_DICT = dict(zip(prs_mapper.iloc[:, 0], prs_mapper.iloc[:, 1]))
+    start_row = find_substring_position('PGS', prs_mapper[1])
+    PRS_DICT = dict(zip(prs_mapper.iloc[start_row:, 0], prs_mapper.iloc[start_row:, 1]))
 
     PRS_DICT = {
         f"{key.replace(' ', '_').replace('-','_')}": value
@@ -211,7 +215,6 @@ def prep_r_regression_data(
     }
     # PRS_DICT['Total_bilirubin'] = 'PGS001942' #TODO check this
     logger.info(PRS_DICT)
-
     phenotype_file = config.get("phenotype_file")
 
     phenotype_df = pd.read_parquet(phenotype_file)
