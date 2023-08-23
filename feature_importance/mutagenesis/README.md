@@ -11,10 +11,10 @@ Use `mutate.snakefile` to perform mutagenesis experiments to generate raw files 
 To be able to run this pipeline, you need to replace the following variables in `mutate.snakefile` file:
 *  `[path_to_deeprvat]` with the path to your clone of [deeprvat](https://github.com/PMBio/deeprvat/) repository  
 *  `[path_to_inputs]` with the path that contain the outputs of complete model training where for each phenotype following four files are generated:
-  *  `input_tensor_file = [path_to_inputs]/{pheno}/deeprvat/input_tensor.zarr`
-  *  `covariates_file = [path_to_inputs]/{pheno}/deeprvat/covariates.zarr`
-  *  `y_file = [path_to_inputs]/{pheno}/deeprvat/y.zarr`
-  *  `training_gene_file = [path_to_inputs]/{pheno}/deeprvat/seed_genes.parquet`
+  * `input_tensor_file = [path_to_inputs]/{pheno}/deeprvat/input_tensor.zarr`
+  * `covariates_file = [path_to_inputs]/{pheno}/deeprvat/covariates.zarr`
+  * `y_file = [path_to_inputs]/{pheno}/deeprvat/y.zarr`
+  * `training_gene_file = [path_to_inputs]/{pheno}/deeprvat/seed_genes.parquet`
 * `[path_to_deeprvat-analysis]`  with the path to your clone of this repository  
 
 #### Try the pipeline on example data
