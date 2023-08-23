@@ -96,7 +96,7 @@ baseline_results:
         base:  #PATH_TO_BASELINE 
         type: plof/skat
     -
-        base:#PATH_TO_BASELINE 
+        base: #PATH_TO_BASELINE 
         type: missense/skat
 
 alpha: 0.05
