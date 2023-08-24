@@ -1,12 +1,15 @@
 from pathlib import Path
 from typing import List
 
-configfile: 'config.yaml'
 
-py = 'python ~/genopheno/genopheno/aggregation_metrics/'
+py="python [path_to_deeprvat]/deeprvat/deeprvat/"
 
-## base_dir is where ckpts are saved
-base_dir = '~/experiments/rvat/multipheno_bagging_reverse'
+path_to_inputs="[path_to_example_input_dir]"
+pretrained_dir="[path_to_deeprvat]/pretrained_models"
+config_file="[path_to_deeprvat-analysis]/association_testing/paper_experiment/config.yaml"
+
+
+
 repeats = ['0', '1','2','3','4','5']
 samplings = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15']
 
@@ -20,9 +23,9 @@ rule all:
     
 rule run_over_bags:
     input:
-        config_file = ''.join([ base_dir + '/models/repeat_{repeat}/config.yaml']),
-        input_dir = ''.join([ base_dir ]),
-        checkpoint_files = ''.join([ base_dir + '/models/repeat_{repeat}/best']),                                           
+        config_file = ''.join([ config_file ]),
+        input_dir = ''.join([ path_to_inputs ]),
+        checkpoint_files = ''.join([ pretrained_dir + '/repeat_{repeat}/best']),                                           
     output:
         'sample_{sampling}/repeat_{repeat}_shap_avg_annots.pkl'
     threads: 1
