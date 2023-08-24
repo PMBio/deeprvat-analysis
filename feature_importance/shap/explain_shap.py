@@ -33,15 +33,6 @@ from matplotlib import pyplot
 
 import deeprvat.deeprvat.models as pl_models
 
-#import genopheno.aggregation_metrics.agg_models as agg_models
-#import genopheno.aggregation_metrics.pl_models as pl_models
-#from genopheno.aggregation_metrics.learn_burden import PhenotypeModel
-#from genopheno.data import DenseGTDataset
-#from genopheno.train import GenoPheno
-#from genopheno.utils import suggest_batch_size
-#from seak import scoretest
-
-
 
 logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s: %(message)s',
                     level='INFO',
