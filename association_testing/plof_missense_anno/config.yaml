@@ -84,27 +84,28 @@ phenotypes:
         n_training_genes: 40
         baseline_phenotype: Urate
 
-
 baseline_results:
     -
-        base: /omics/odcf/analysis/OE0540_projects/ukbb/experiments/experiments_eva/baseline/all_phenos_beta_weighted_burden_maf_0.001_qt_pheno
+        base: baseline_results
         type: plof/burden
     -
-        base: /omics/odcf/analysis/OE0540_projects/ukbb/experiments/experiments_eva/baseline/all_phenos_beta_weighted_burden_maf_0.001_qt_pheno
+        base: baseline_results
         type: missense/burden
     -
-        base: /omics/odcf/analysis/OE0540_projects/ukbb/experiments/experiments_eva/baseline/all_phenos_beta_weighted_burden_maf_0.001_qt_pheno
+        base: baseline_results
         type: plof/skat
     -
-        base: /omics/odcf/analysis/OE0540_projects/ukbb/experiments/experiments_eva/baseline/all_phenos_beta_weighted_burden_maf_0.001_qt_pheno
+        base: baseline_results
         type: missense/skat
 
 alpha: 0.05
 
 n_burden_chunks: 4
-n_regression_chunks: 40
+n_regression_chunks: 10
 
 n_repeats: 6
+
+do_scoretest: True
 
 training:
     min_variant_count: 1
@@ -142,60 +143,14 @@ model:
     model_collection: agg_models
     checkpoint: combined_agg.pt
     config:
-        # input_dim: 36
         phi_layers: 2
-            # hparam:
-            #     type: int
-            #     args:
-            #         - 2
-            #         - 4
         phi_hidden_dim: 20
-            # hparam:
-            #     type: int
-            #     args:
-            #         - 16
-            #         - 64
-            #     kwargs:
-            #         step: 16
         rho_layers: 3
-            # hparam:
-            #     type: int
-            #     args:
-            #         - 2
-            #         - 4
         rho_hidden_dim: 10
-            # hparam:
-            #     type: int
-            #     args:
-            #         - 8
-            #         - 32
-            #     kwargs:
-            #         step: 8
-        activation: LeakyReLU #was ReLU
-            # hparam:
-            #     type: categorical
-            #     args:
-            #         -
-            #             - LeakyReLU
-            #             - Tanh
+        activation: LeakyReLU
         pool: max
-            # hparam:
-            #     type: categorical
-            #     args:
-            #         -
-            #             - sum
-            #             - max
-        # dropout:
-        #     hparam:
-        #         type: float
-        #         args:
-        #             - 0.
-        #             - 0.6
-        #         kwargs:
-        #             step: 0.1
         use_sigmoid: True
         metrics:
-            # objective: PearsonCorrTorch
             objective: MSE
             objective_mode: min
             loss: MSE
@@ -209,12 +164,13 @@ model:
             config: {}
 
 training_data:
-    gt_file: /omics/odcf/analysis/OE0540_projects/ukbb/exomes/vcf/preprocessed/genotypes.h5
+    gt_file: genotypes.h5
+    variant_file: variants.parquet
     dataset_config:
         min_common_af:
             combined_UKB_NFE_AF: 0.01
-        phenotype_prefix: /omics/odcf/analysis/OE0540_projects/ukbb/exomes/vcf/preprocessed/genotypes
-        quantile_transform_y: True
+        phenotype_file: phenotypes.parquet
+        y_transformation: quantile_transform
         x_phenotypes:
             - age
             - genetic_sex
@@ -238,11 +194,11 @@ training_data:
             - genetic_PC_18
             - genetic_PC_19
             - genetic_PC_20
-        annotation_file: /omics/odcf/analysis/OE0540_projects/ukbb/exomes/vcf/annotations/current_annotations.parquet
+        annotation_file: annotations.parquet
         annotations:
             - combined_UKB_NFE_AF
-            - combined_UKB_NFE_AF_MB
             - CADD_PHRED
+            - combined_UKB_NFE_AF_MB
             - Consequence_splice_acceptor_variant
             - Consequence_splice_donor_variant
             - Consequence_stop_gained
@@ -275,12 +231,13 @@ training_data:
         num_workers: 8
 
 data:
-    gt_file: /omics/odcf/analysis/OE0540_projects/ukbb/exomes/vcf/preprocessed/genotypes.h5
+    gt_file: genotypes.h5
+    variant_file: variants.parquet
     dataset_config:
         min_common_af:
             combined_UKB_NFE_AF: 0.01
-        phenotype_prefix: /omics/odcf/analysis/OE0540_projects/ukbb/exomes/vcf/preprocessed/genotypes
-        quantile_transform_y: True
+        phenotype_file: phenotypes.parquet
+        y_transformation: quantile_transform
         x_phenotypes:
             - age
             - genetic_sex
@@ -304,11 +261,11 @@ data:
             - genetic_PC_18
             - genetic_PC_19
             - genetic_PC_20
-        annotation_file: /omics/odcf/analysis/OE0540_projects/ukbb/exomes/vcf/annotations/current_annotations.parquet
+        annotation_file: annotations.parquet
         annotations:
             - combined_UKB_NFE_AF
-            - combined_UKB_NFE_AF_MB
             - CADD_PHRED
+            - combined_UKB_NFE_AF_MB
             - Consequence_splice_acceptor_variant
             - Consequence_splice_donor_variant
             - Consequence_stop_gained
@@ -316,7 +273,7 @@ data:
             - Consequence_stop_lost
             - Consequence_start_lost
             - Consequence_missense_variant
-        gene_file: /omics/odcf/analysis/OE0540_projects/ukbb/exomes/vcf/annotations/protein_coding_genes.parquet
+        gene_file: protein_coding_genes.parquet
         use_common_variants: False
         use_rare_variants: True
         rare_embedding:
@@ -334,7 +291,7 @@ data:
                 thresholds:
                     combined_UKB_NFE_AF: "combined_UKB_NFE_AF < 1e-3"
                     CADD_PHRED:  "CADD_PHRED > 5"
-                gene_file: /omics/odcf/analysis/OE0540_projects/ukbb/exomes/vcf/annotations/protein_coding_genes.parquet
+                gene_file: protein_coding_genes.parquet
                 verbose: True
                 low_memory: True
         verbose: True

@@ -8,10 +8,11 @@ For the three subdirectories with their association `config.yaml` files, run the
 
 Compute the replication results:
 ```
-for EXP in paper_experiment linear_model plof_missense_anno permutation_analysis
+for EXP in paper_experiment linear_model plof_missense_anno
     do
     python compute_replication.py --out-dir $EXP $EXP
 done
+EXP=repeat_analysis && python compute_replication.py --analyze-all-repeats --out-dir $EXP $EXP
 ```
 
 Use the notebook `rvat_figures.Rmd` to analyze the results.

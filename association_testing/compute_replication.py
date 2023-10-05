@@ -1,5 +1,7 @@
 import copy
+import logging
 import pickle
+import sys
 from pathlib import Path
 from pprint import pprint
 
@@ -11,28 +13,13 @@ import yaml
 from deeprvat.utils import pval_correction
 from tqdm import tqdm
 
-
-phenocode_df = pd.read_parquet("phenocodes.parquet", engine="pyarrow")
-phenocode_dict = {
-    pheno: int(code.split("-")[0])
-    for pheno, code in zip(phenocode_df["phenotype"], phenocode_df["phenocode"])
-}
-
-GENEBASS_NAME_DICT = copy.deepcopy(phenocode_dict)
-# GENEBASS_NAME_DICT.update({f"{k}_standardized": v for k, v in phenocode_dict.items()})
-
-UKB_500_NAME_DICT = {
-    pheno: trait
-    for pheno, trait in zip(phenocode_df["phenotype"], phenocode_df["backman_trait"])
-}
-UKB_500_NAME_DICT.update(
-    {
-        pheno: trait
-        for pheno, trait in zip(
-            phenocode_df["phenotype"], phenocode_df["backman_trait"]
-        )
-    }
+logging.basicConfig(
+    format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s",
+    level="INFO",
+    stream=sys.stdout,
 )
+logger = logging.getLogger(__name__)
+
 
 PHENOTYPES = [
     "Apolipoprotein_A",
@@ -72,6 +59,30 @@ METHODS = list(
 
 
 def read_comparison_results(comparison_dir: str, gene_df: pd.DataFrame, pheno: str):
+    phenocode_df = pd.read_parquet("phenocodes.parquet", engine="pyarrow")
+    phenocode_dict = {
+        pheno: int(code.split("-")[0])
+        for pheno, code in zip(phenocode_df["phenotype"], phenocode_df["phenocode"])
+    }
+
+    GENEBASS_NAME_DICT = copy.deepcopy(phenocode_dict)
+    # GENEBASS_NAME_DICT.update({f"{k}_standardized": v for k, v in phenocode_dict.items()})
+
+    UKB_500_NAME_DICT = {
+        pheno: trait
+        for pheno, trait in zip(
+            phenocode_df["phenotype"], phenocode_df["backman_trait"]
+        )
+    }
+    UKB_500_NAME_DICT.update(
+        {
+            pheno: trait
+            for pheno, trait in zip(
+                phenocode_df["phenotype"], phenocode_df["backman_trait"]
+            )
+        }
+    )
+
     gene_df = gene_df.copy()
     gene_df["ensgid"] = gene_df["gene"].str.split(".", expand=True)[0]
 
@@ -188,9 +199,14 @@ def prep_for_rep_plot(
 @click.command()
 @click.option("--out-dir", type=click.Path(exists=True), default=".")
 @click.option("--recompute-comparison-results", is_flag=True)
+@click.option("--analyze-all-repeats", is_flag=True)
 @click.argument("experiment-dir", type=click.Path(exists=True))
-def cli(out_dir: str, experiment_dir: str, recompute_comparison_results: bool):
-
+def cli(
+    out_dir: str,
+    experiment_dir: str,
+    recompute_comparison_results: bool,
+    analyze_all_repeats: bool,
+):
     if recompute_comparison_results:
         comparison_results = {
             pheno: read_comparison_results(
@@ -218,25 +234,40 @@ def cli(out_dir: str, experiment_dir: str, recompute_comparison_results: bool):
         ]
     )
 
-    rep_list = []
-    replication_data_all = prep_for_rep_plot(
-        results,
-        comparison_results,
-        n_genes=1000,
-    ).assign(pheno_grouping="all_phenotypes")
-    rep_list.append(replication_data_all)
+    with open(Path(experiment_dir) / "config.yaml") as f:
+        config = yaml.safe_load(f)
+    n_repeats = config["n_repeats"]
 
-    for pheno in results["phenotype"].unique():
-        replication_data_pheno = prep_for_rep_plot(
-            results.query("phenotype == @pheno"),
+    if analyze_all_repeats:
+        repeats_to_use = range(1, n_repeats + 1)
+    else:
+        repeats_to_use = [n_repeats]
+
+    all_repeats_list = []
+    for repeats in repeats_to_use:
+        logger.info(f"Analyzing replication with {repeats} DeepRVAT repeats")
+        rep_list = []
+        replication_data_all = prep_for_rep_plot(
+            results.query("repeats == @repeats"),
             comparison_results,
             n_genes=1000,
-        ).assign(pheno_grouping="single_pheno")
-        rep_list.append(replication_data_pheno)
+        ).assign(pheno_grouping="all_phenotypes")
+        rep_list.append(replication_data_all)
 
-    replication_data = pd.concat(rep_list).query("Method in @METHODS")
+        for pheno in results["phenotype"].unique():
+            replication_data_pheno = prep_for_rep_plot(
+                results.query("phenotype == @pheno"),
+                comparison_results,
+                n_genes=1000,
+            ).assign(pheno_grouping="single_pheno")
+            rep_list.append(replication_data_pheno)
+
+        this_replication_data = pd.concat(rep_list).query("Method in @METHODS")
+        this_replication_data["repeats"] = repeats
+        all_repeats_list.append(this_replication_data)
 
     print("Writing replication")
+    replication_data = pd.concat(all_repeats_list)
     replication_data.to_parquet(Path(out_dir) / "replication.parquet", engine="pyarrow")
 
 
