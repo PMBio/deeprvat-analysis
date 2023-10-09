@@ -178,7 +178,7 @@ def compute_alternative_burdens_(
     chunk: Optional[int] = None,
 ) -> Tuple[np.ndarray, zarr.core.Array, zarr.core.Array, zarr.core.Array]:
     try:
-        data_config = config["plof_data"]
+        data_config = config["alt_burdens_data"]
     except:
         data_config = config["data"]
 
@@ -326,7 +326,7 @@ def compute_alternative_burdens(
     else:
         if dataset_file is None:
             logger.info("No dataset_file provided; instantiating dataset")
-        dataset = make_dataset_(config, data_key="plof_data")
+        dataset = make_dataset_(config, data_key="alt_burdens_data")
         if dataset_file is not None:
             logger.info(f"Pickling dataset to {dataset_file}")
             with open(dataset_file, "wb") as f:
