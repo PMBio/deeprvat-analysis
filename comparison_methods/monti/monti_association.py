@@ -827,9 +827,10 @@ def run_association(
     logger.info("Grouping variants by gene")
     exploded_annotations = (
         dataset.annotation_df.query("id in @all_variants")
-        .explode("gene_ids")
+        .explode('gene_ids').reset_index()
         .drop_duplicates()
-    )  # row can be duplicated if a variant is assigned to a gene multiple times
+        .set_index('id')
+    )     
     variant_to_aa_map = None
     if (
         ("missense" in var_type)
