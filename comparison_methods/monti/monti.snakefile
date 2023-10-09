@@ -69,8 +69,17 @@ NEW_PHENOTYPES = [
   "WHR_Body_mass_index_BMI_corrected"
 ]
 
-phenotypes_eval_dict = {'all_phenotypes':[OLD_PHENOTYPES, NEW_PHENOTYPES],
-                    'new_phenotypes':NEW_PHENOTYPES}
+
+
+
+phenotypes_eval_dict = {'all_phenotypes':[*OLD_PHENOTYPES, *NEW_PHENOTYPES],
+                    'new_phenotypes': NEW_PHENOTYPES,
+                    'training_phenotypes': OLD_PHENOTYPES}
+
+# rule all:
+#     input:
+#         expand('replication_monti.Rds',
+#                     key = phenotypes_eval_dict.keys())
 rule all:
     input:
         expand('replication_monti_{key}.Rds',
@@ -100,8 +109,38 @@ rule replication:
         load=16000,
     script:
         f"{pipeline_dir}/monti_replication.R"
+# rule all:
+#     input:
+#         expand('replication_monti.Rds',
+#                     key = phenotypes_eval_dict.keys())
+
+rule replication:
+    conda:
+        "r-env"
+    input:
+        expand(
+            "{phenotype}/eval/postprocessed_associations.parquet",
+            phenotype=phenotypes,
+        ),
+    output:
+        out_path="replication_monti.Rds",
+    params:
+        code_dir=pipeline_dir,
+        phenotypes=phenotypes,
+        phenotype_suffix=''
+    threads: 1
+    resources:
+        mem_mb=16000,
+        load=16000,
+    script:
+        f"{pipeline_dir}/monti_replication.R"
 
 
+rule all_postprocess:
+    input:
+        expand(
+                "{phenotype}/eval/postprocessed_associations.parquet",
+                phenotype=phenotypes)
 rule postprocess_results:
     conda:
         "r-env"

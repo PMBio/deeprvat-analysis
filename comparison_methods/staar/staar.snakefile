@@ -73,10 +73,15 @@ NEW_PHENOTYPES = [
   "WHR_Body_mass_index_BMI_corrected"
 ]
 
-phenotypes_eval_dict = {'all_phenotypes':[OLD_PHENOTYPES, NEW_PHENOTYPES],
-                    'new_phenotypes':NEW_PHENOTYPES}
 
-# phenotypes = ['CAD_HARD', 'CAD_SOFT', 'Jurgens_Hypercholesterolemia', 'Jurgens_Hypothyroidism']
+phenotypes_eval_dict = {'all_phenotypes':[*OLD_PHENOTYPES, *NEW_PHENOTYPES],
+                    'new_phenotypes': NEW_PHENOTYPES,
+                    'training_phenotypes': OLD_PHENOTYPES}
+
+
+# rule all:
+#     input:
+#         expand('replication_staar.Rds')
 
 rule all:
     input:
@@ -104,6 +109,31 @@ rule replication:
         phenotypes=lambda wildcards: phenotypes_eval_dict[wildcards.key],
         masks=masks,
         phenotype_suffix='_{key}'
+    threads: 1
+    resources:
+        mem_mb=32000,
+        load=16000,
+    script:
+        f"{pipeline_dir}/staar_replication.R"
+
+
+
+rule replication:
+    conda:
+        "r-env"
+    input:
+        expand(
+            "{phenotype}/{mask}/results/burden_associations.parquet",
+            phenotype=phenotypes,
+            mask=masks,
+        ),
+    output:
+        out_path="replication_staar.Rds",
+    params:
+        code_dir=pipeline_dir,
+        phenotypes=phenotypes,
+        masks=masks,
+        phenotype_suffix=''
     threads: 1
     resources:
         mem_mb=32000,
