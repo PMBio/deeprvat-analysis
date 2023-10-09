@@ -359,12 +359,12 @@ rule training_dataset_pickle:
 
 rule all_config:
     input:
-        # seed_genes = expand('{phenotype}/deeprvat/seed_genes.parquet',
-                            # phenotype=phenotypes),
+        seed_genes = expand('{phenotype}/deeprvat/seed_genes.parquet',
+                            phenotype=phenotypes),
         config = expand('{phenotype}/deeprvat/hpopt_config.yaml',
                         phenotype=phenotypes),
-        # baseline = expand('{phenotype}/deeprvat/baseline_results.parquet',
-        #                   phenotype=phenotypes),
+        baseline = expand('{phenotype}/deeprvat/baseline_results.parquet',
+                          phenotype=phenotypes),
 
 rule config:
     input:
@@ -375,9 +375,9 @@ rule config:
             for r in config['baseline_results']
         ]
     output:
-        # seed_genes = '{phenotype}/deeprvat/seed_genes.parquet',
+        seed_genes = '{phenotype}/deeprvat/seed_genes.parquet',
         config = '{phenotype}/deeprvat/hpopt_config.yaml',
-        # baseline = '{phenotype}/deeprvat/baseline_results.parquet',
+        baseline = '{phenotype}/deeprvat/baseline_results.parquet',
     threads: 1
     params:
         baseline_results = lambda wildcards, input: ''.join([
@@ -389,8 +389,8 @@ rule config:
             'deeprvat_config update-config '
             '--phenotype {wildcards.phenotype} '
             '{params.baseline_results}'
-            # '--baseline-results-out {output.baseline} '
-            # '--seed-genes-out {output.seed_genes} '
-            # '{input.config} '
+            '--baseline-results-out {output.baseline} '
+            '--seed-genes-out {output.seed_genes} '
+            '{input.config} '
             '{output.config}'
         )
