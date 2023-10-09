@@ -66,39 +66,6 @@ OLD_PHENOTYPES = [
 ]
 TRAINING_PHENOTYPES = copy.deepcopy(OLD_PHENOTYPES)
 
-# PHENOTYPES = [
-#     "Apolipoprotein_A",
-#     "Apolipoprotein_B",
-#     "Calcium",
-#     "Cholesterol",
-#     "HDL_cholesterol",
-#     "IGF_1",
-#     "LDL_direct",
-#     "SHBG",
-#     "Total_bilirubin",
-#     "Triglycerides",
-#     "Urate",
-#     "Mean_corpuscular_volume",
-#     "Platelet_count",
-#     "Mean_platelet_thrombocyte_volume",
-#     "Platelet_crit",
-#     "Standing_height",
-#     "Mean_reticulocyte_volume",
-#     "Platelet_distribution_width",
-#     "Lymphocyte_percentage",
-#     "Neutrophill_count",
-#     "Red_blood_cell_erythrocyte_count",
-#     "Body_mass_index_BMI",
-#     "Glucose",
-#     "Vitamin_D",
-#     "Albumin",
-#     "Total_protein",
-#     "Cystatin_C",
-#     "Gamma_glutamyltransferase",
-#     "Alkaline_phosphatase",
-#     "Creatinine"
-# ]
-
 NEW_PHENOTYPES = [
     "Body_mass_index_BMI",
     "Glucose",
@@ -110,17 +77,16 @@ NEW_PHENOTYPES = [
     "Alkaline_phosphatase",
     "Creatinine", 
     "Whole_body_fat_free_mass",
-    "Forced_expiratory_volume_in_1_second_FEV1",
+    "Forced_expiratory_volume_in_1_sec∂ond_FEV1",
     "Glycated_haemoglobin_HbA1c",
-    "QTC_interval",
-    'WHR',
     'WHR_Body_mass_index_BMI_corrected' #not using these phenos because they are not in genebas/backman
 ]
 
-# PHENOTYPES = NEW_PHENOTYPES
-PHENOTYPES = [*NEW_PHENOTYPES, *OLD_PHENOTYPES]
-# PHENOTYPES = OLD_PHENOTYPES
-print(f'analysing phenotypes {PHENOTYPES}')
+phenotype_dict = {'all' :  [*NEW_PHENOTYPES, *OLD_PHENOTYPES],
+                'new': NEW_PHENOTYPES, 
+                'train': OLD_PHENOTYPES}
+
+
 
 METHODS = list(
     reversed(
@@ -248,10 +214,16 @@ def prep_for_rep_plot(
 
 
 @click.command()
-@click.option("--out-dir", type=click.Path(exists=True), default=".")
+# @click.option("--out-dir", type=click.Path(exists=True), default=".")
+@click.option("--out-file", default="replication.parquet")
+@click.option("--phenotypes", default="all")
 @click.option("--recompute-comparison-results", is_flag=True)
 @click.argument("experiment-dir", type=click.Path(exists=True))
-def cli(out_dir: str, experiment_dir: str, recompute_comparison_results: bool):
+def cli(out_file: str, experiment_dir: str, 
+        phenotypes: str,
+        recompute_comparison_results: bool):
+    PHENOTYPES = phenotype_dict[phenotypes]
+    print(f'analysing phenotypes {PHENOTYPES}')
 
     if recompute_comparison_results:
         comparison_results = {
@@ -314,7 +286,9 @@ def cli(out_dir: str, experiment_dir: str, recompute_comparison_results: bool):
     replication_data = pd.concat(rep_list).query("Method in @METHODS")
 
     print("Writing replication")
-    replication_data.to_parquet(Path(out_dir) / "replication.parquet", engine="pyarrow")
+    replication_data.to_parquet(out_file, engine="pyarrow")
+
+    # replication_data.to_parquet(Path(out_dir) / "replication.parquet", engine="pyarrow")
 
 
 if __name__ == "__main__":
