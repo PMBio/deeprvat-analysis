@@ -8,7 +8,7 @@ library(yardstick)
 
 phenotypes = snakemake@params[["phenotypes"]]
 linear_model_res_path = snakemake@params[["input_res_path"]]
-fdr = snakemake@params[["fdr"]]
+fdr = snakemake@params[["fdr"]]  #TODO remove this, not used
 phenotype_suffix = snakemake@params[["phenotype_suffix"]]
 out_dir = snakemake@params[["out_dir"]]
 #######
