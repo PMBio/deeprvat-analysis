@@ -20,6 +20,19 @@ phenotypes:
   - Platelet_crit
   - Platelet_distribution_width
   - Red_blood_cell_erythrocyte_count
+  - Body_mass_index_BMI
+  - Glucose
+  - Vitamin_D
+  - Albumin
+  - Total_protein
+  - Cystatin_C
+  - Gamma_glutamyltransferase
+  - Alkaline_phosphatase
+  - Creatinine
+  - Whole_body_fat_free_mass
+  - Forced_expiratory_volume_in_1_second_FEV1
+  - Glycated_haemoglobin_HbA1c
+  
 cv_splits: 5
 ######################### significant genes ############
 

@@ -7,6 +7,7 @@ debug_flag = config.get('debug', False)
 phenotypes = config['phenotypes']
 phenotypes = phenotypes.keys() if type(phenotypes) == dict else phenotypes
 burden_phenotype = phenotypes[0]
+burden_phenotype = 'Apolipoprotein_A'
 if type(phenotypes) == dict:
     training_phenotypes = {p: config['phenotypes'][p].get('training_phenotype', p)
                         for p in phenotypes}

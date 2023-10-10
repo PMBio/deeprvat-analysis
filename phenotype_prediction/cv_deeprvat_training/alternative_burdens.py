@@ -31,7 +31,6 @@ from seak import scoretest, lrt
 from name_mappings import BTYPES_DICT, PLOF_CONSEQUENCES
 
 
-
 logging.basicConfig(
     format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s",
     level="INFO",
@@ -43,8 +42,6 @@ logger = logging.getLogger(__name__)
 PLOF_COLS = PLOF_CONSEQUENCES
 
 BTYPES_DICT_rev = {val: key for key, val in BTYPES_DICT.items()}
-
-
 
 
 @click.group()
@@ -106,7 +103,6 @@ def make_dataset_(
         elif restrict_samples is not None:
             ds = Subset(ds, range(restrict_samples))
 
-
     return ds
 
 
@@ -138,13 +134,6 @@ def make_dataset(
 
     with open(out_file, "wb") as f:
         pickle.dump(ds, f)
-
-
-
-
-
-
-
 
 
 def get_plof_burden(
@@ -287,7 +276,6 @@ def compute_alternative_burdens_(
             "Wrote results for chunk indices " f"[{chunk_start}, {chunk_end - 1}]"
         )
 
-
     return ds_full.rare_embedding.genes, burdens, y, x
 
 
@@ -340,14 +328,6 @@ def compute_alternative_burdens(
 
     logger.info("Saving computed burdens, corresponding genes, and targets")
     np.save(Path(out_dir) / "genes.npy", genes)
-
-
-
-
-
-
-
-
 
 
 if __name__ == "__main__":
