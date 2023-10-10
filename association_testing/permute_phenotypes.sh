@@ -22,5 +22,5 @@ python deeprvat_preprocess permute-phenotypes \
        --phenotype Total_bilirubin \
        --phenotype Triglycerides \
        --phenotype Urate \
-       permutation_analysis/phenotypes.parquet \
+       paper_experiment/phenotypes.parquet \
        permutation_analysis/phenotypes.parquet

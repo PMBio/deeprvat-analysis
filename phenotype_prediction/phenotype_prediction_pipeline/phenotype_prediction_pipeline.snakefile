@@ -1,4 +1,5 @@
 from snakemake.utils import Paramspace
+from snakemake.utils import Paramspace
 from snakemake.utils import min_version
 import copy
 import os
@@ -19,6 +20,10 @@ cv_splits = config.get("cv_splits", 5)
 
 
 phenotypes = config.get("phenotypes")
+training_phenotypes = config.get("phenotypes")
+phenotypes = ['HDL_cholesterol', 'LDL_direct']
+training_phenotypes = phenotypes
+
 
 DEEPRVAT_ANALYSIS_DIR = os.environ["DEEPRVAT_ANALYSIS_DIR"]
 code_dir = (
@@ -28,6 +33,7 @@ code_dir = (
 top_bottom_quantiles = ["topq", "bottomq"]
 
 regression_config = config["regression"]
+regression_config["r_config"]['code_dir'] = code_dir
 phenotype_suffixes = regression_config["pheno_suffixes"]
 top_quantiles = regression_config["top_quantiles"]
 
@@ -57,6 +63,16 @@ rule all_phenotype_prediction:
             "phenotype_prediction/models/linear_models/plotting_data/enrichment_prs_vs_zscore_{quantile}_{phenotype_suffix}_{fdr}.Rds",
             phenotype_suffix=phenotype_suffixes,
             quantile=[0.99, 0.999],
+            fdr=fdrs,
+        ),
+        expand(
+            "phenotype_prediction/models/linear_models/plotting_data/all_recomputed_metrics_test_{phenotype_suffix}_{fdr}.Rds",
+            phenotype_suffix=phenotype_suffixes,
+            fdr=fdrs,
+        ),
+        expand(
+            "phenotype_prediction/models/logistic_models/plotting_data/combined_metrics_{phenotype_suffix}_{fdr}.Rds",
+            phenotype_suffix=phenotype_suffixes,
             fdr=fdrs,
         ),
 
@@ -273,7 +289,10 @@ rule fit_linear_regression_model_fdr:
     script:
         f"{code_dir}/run_linear_regression.R"
 
-
+rule all_r_input_data:
+    input:
+        expand("phenotype_prediction/r_data/{phenotype}/cv_split{cvsplit}/data.finished",
+               phenotype = phenotypes, cvsplit=range(cv_splits))
 rule prep_data_for_r:
     input:
         burdens=expand(
@@ -375,6 +394,9 @@ rule combine_discoveries:
         sig_files=lambda wildcards, input: "".join(
             [f"--sig-file {d} " for d in input.discoveries]
         ),
+        training_phenotype="".join(
+            [f"--train-pheno {d} " for d in training_phenotypes]
+        ),
     shell:
         " && ".join(
         [
@@ -382,6 +404,7 @@ rule combine_discoveries:
             (
         py + "extract_burdens_for_prs.py combine-significant "
                     " {params.sig_files} "
+                    " {params.training_phenotype} "
                     " {output}"
                 ),
             ]

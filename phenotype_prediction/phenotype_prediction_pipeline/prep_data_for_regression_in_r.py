@@ -172,6 +172,9 @@ def get_sample_indices(dataset_dir, phenotype, split, prs_df):
 def cli():
     pass
 
+def find_substring_position(substring, string_list):
+    matches = [index for index, string in enumerate(string_list) if substring in string]
+    return matches[0] if matches else -1
 
 @cli.command()
 @click.option("--result-dir", type=click.Path(exists=True), default="./")
@@ -201,9 +204,10 @@ def prep_r_regression_data(
     logger.info(f"preparing input data for burden types {burden_types}")
     phenotype = phenotype.replace("_standardized", "")
     logger.info(f"Preparing data for phenotype: {phenotype}")
-    prs_mapper = pd.read_csv(config.get("prs_pheno_map"))
+    prs_mapper = pd.read_csv(config.get("prs_pheno_map"), header = None)
 
-    PRS_DICT = dict(zip(prs_mapper.iloc[:, 0], prs_mapper.iloc[:, 1]))
+    start_row = find_substring_position('PGS', prs_mapper[1])
+    PRS_DICT = dict(zip(prs_mapper.iloc[start_row:, 0], prs_mapper.iloc[start_row:, 1]))
 
     PRS_DICT = {
         f"{key.replace(' ', '_').replace('-','_')}": value
@@ -211,7 +215,6 @@ def prep_r_regression_data(
     }
     # PRS_DICT['Total_bilirubin'] = 'PGS001942' #TODO check this
     logger.info(PRS_DICT)
-
     phenotype_file = config.get("phenotype_file")
 
     phenotype_df = pd.read_parquet(phenotype_file)
@@ -233,6 +236,7 @@ def prep_r_regression_data(
     logger.info(f"Using PRS id {prs_id}")
     prs_df = load_prs(prs_id, config.get("prs_file"))
     logger.info(prs_df)
+
     ### Define phenotype df
     _, this_phenotype_df = add_corrected_phenotype_cols(phenotype, phenotype_df, prs_df)
 
@@ -242,7 +246,6 @@ def prep_r_regression_data(
     genes_this_pheno = compare_with_baseline_studies(
         phenotype,
         discoveries,
-        genebass_discoveries_file=config.get("genebass_discoveries_file"),
     )
 
     logger.info("Loading burdens")
@@ -262,7 +265,6 @@ def prep_r_regression_data(
     indices_dict = {}
     for split in splits:
         indices_dict[split] = get_sample_indices(dataset_dir, phenotype, split, prs_df)
-
     assert (
         indices_dict["train"]["sample_mask"].shape[0]
         == burdens_dict["train"]["deeprvat"][
