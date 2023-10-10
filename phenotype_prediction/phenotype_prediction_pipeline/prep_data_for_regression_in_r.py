@@ -172,9 +172,6 @@ def get_sample_indices(dataset_dir, phenotype, split, prs_df):
 def cli():
     pass
 
-def find_substring_position(substring, string_list):
-    matches = [index for index, string in enumerate(string_list) if substring in string]
-    return matches[0] if matches else -1
 
 def find_substring_position(substring, string_list):
     matches = [index for index, string in enumerate(string_list) if substring in string]

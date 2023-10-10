@@ -3,7 +3,6 @@ import logging
 import logging
 import pickle
 import sys
-import sys
 from pathlib import Path
 from pprint import pprint
 
@@ -15,28 +14,14 @@ import yaml
 from deeprvat.utils import pval_correction
 from tqdm import tqdm
 
-
-phenocode_df = pd.read_parquet("phenocodes.parquet", engine="pyarrow")
-phenocode_dict = {
-    pheno: int(code.split("-")[0])
-    for pheno, code in zip(phenocode_df["phenotype"], phenocode_df["phenocode"])
-}
-
-GENEBASS_NAME_DICT = copy.deepcopy(phenocode_dict)
-# GENEBASS_NAME_DICT.update({f"{k}_standardized": v for k, v in phenocode_dict.items()})
-
-UKB_500_NAME_DICT = {
-    pheno: trait
-    for pheno, trait in zip(phenocode_df["phenotype"], phenocode_df["backman_trait"])
-}
-UKB_500_NAME_DICT.update(
-    {
-        pheno: trait
-        for pheno, trait in zip(
-            phenocode_df["phenotype"], phenocode_df["backman_trait"]
-        )
-    }
+logging.basicConfig(
+    format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s",
+    level="INFO",
+    stream=sys.stdout,
 )
+logger = logging.getLogger(__name__)
+
+
 
 PHENOTYPES = [
     "Apolipoprotein_A",
@@ -221,8 +206,13 @@ def prep_for_rep_plot(
 @click.option("--recompute-comparison-results", is_flag=True)
 @click.option("--analyze-all-repeats", is_flag=True)
 @click.argument("experiment-dir", type=click.Path(exists=True))
-def cli(out_dir: str, experiment_dir: str, recompute_comparison_results: bool):
-
+def cli(
+        out_dir: str, 
+        experiment_dir: str, 
+        recompute_comparison_results: bool,
+        analyze_all_repeats: bool,
+):
+    logger.info(f'analysing phenotypes {PHENOTYPES}')
     if recompute_comparison_results:
         comparison_results = {
             pheno: read_comparison_results(
@@ -252,14 +242,29 @@ def cli(out_dir: str, experiment_dir: str, recompute_comparison_results: bool):
             for p in PHENOTYPES
         ]
     )
+    phenotypes_to_remove = set(results['phenotype'].unique()) - set(comparison_results.keys())
+    logger.info(f'excluding pheotypes {phenotypes_to_remove} because they are not in comparison studies')
+    results = results[~results['phenotype'].isin(phenotypes_to_remove)]
 
-    rep_list = []
-    replication_data_all = prep_for_rep_plot(
-        results,
-        comparison_results,
-        n_genes=1000,
-    ).assign(pheno_grouping="all_phenotypes")
-    rep_list.append(replication_data_all)
+    with open(Path(experiment_dir) / "config.yaml") as f:
+        config = yaml.safe_load(f)
+    n_repeats = config["n_repeats"]
+
+    if analyze_all_repeats:
+        repeats_to_use = range(1, n_repeats + 1)
+    else:
+        repeats_to_use = [n_repeats]
+
+    all_repeats_list = []
+    for repeats in repeats_to_use:
+        logger.info(f"Analyzing replication with {repeats} DeepRVAT repeats")
+        rep_list = []
+        replication_data_all = prep_for_rep_plot(
+            results.query("repeats == @repeats"),
+            comparison_results,
+            n_genes=1000,
+        ).assign(pheno_grouping="all_phenotypes")
+        rep_list.append(replication_data_all)
 
         for pheno in results["phenotype"].unique():
             replication_data_pheno = prep_for_rep_plot(
@@ -273,7 +278,8 @@ def cli(out_dir: str, experiment_dir: str, recompute_comparison_results: bool):
         this_replication_data["repeats"] = repeats
         all_repeats_list.append(this_replication_data)
 
-    print("Writing replication")
+    logger.info("Writing replication")
+    replication_data = pd.concat(all_repeats_list)
     replication_data.to_parquet(Path(out_dir) / "replication.parquet", engine="pyarrow")
 
 

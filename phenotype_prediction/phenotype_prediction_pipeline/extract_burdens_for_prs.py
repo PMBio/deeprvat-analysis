@@ -95,7 +95,8 @@ def extract_burdens(
     logger.info("succesfully completed")
 
 
-
+@cli.command()
+@click.option("--sig-file", type=click.Path(exists=True), multiple=True)
 @click.option("--min-discoveries", type=int, default=1)
 @click.argument("out-file", type=click.Path())
 def combine_significant(sig_file, min_discoveries, out_file):
