@@ -1,0 +1,670 @@
+---
+title: "DeepRVAT - RVAT figures"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+Load libraries
+
+```{r}
+
+library(ggplot2)
+library(arrow)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(ggpubr)
+library(cowplot)
+library(latex2exp)
+library(tibble)
+
+source('rvat_figure_utils.R')
+pheno_choice = 'all_phenotypes'
+
+```
+
+# Define experiment directories
+```{r}
+## define directories
+monti_res_binary_dir = 'monti_binary'
+staar_res_binary_dir = 'staar_binary'
+monti_quant_dir = 'monti'
+staar_quant_dir = 'staar'
+results_dir = 'paper_experiment' #deeprvat quantitative
+results_deeprvat_binary_dir = 'deeprvat_binary'
+timing_data_dir = '../timing/' #timing.Rmd has to be run before executing this markdown
+```
+
+
+
+
+
+```{r}
+phenotypes = read_parquet('phenotypes.parquet')
+binary_trait_counts <- colSums(na.omit(phenotypes %>% select(all_of(binary_phenotypes))))
+
+colSums(!is.na(phenotypes %>% select(all_of(new_quant_phenotypes))))
+
+tibble(Column = gsub('_', ' ', gsub('Jurgens_', '', names(binary_trait_counts))), count = binary_trait_counts)
+
+```
+
+
+# Load results
+
+## DeepRVAT
+```{r}
+
+all_deeprvat_res = loadDeepRVATResults(results_dir = results_dir, phenotypes = quant_phenotypes, phenotype_renamer = phenotype_renamer)
+counts_deeprvat_quant = all_deeprvat_res[['counts']]
+significant_deeprvat_quant = all_deeprvat_res[['significant']]
+results_deeprvat_quant = all_deeprvat_res[['results']]
+pheno_names_to_keep = all_deeprvat_res[['pheno_names_to_keep']]
+```
+
+
+
+## Load Monti et al. results
+
+```{r}
+counts_monti_quant = readRDS(file.path(monti_quant_dir, paste0("monti_counts", monti_staar_name_dict[pheno_choice], ".Rds"))) %>%
+  filter(Trait != 'WHR') %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) %>%
+  rename(n = discoveries) %>%
+  mutate(Method = 'Monti et al.') %>%
+  mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>%
+  filter(Trait %in% pheno_names_to_keep)
+
+monti_res_quant = readRDS(file.path(monti_quant_dir, paste0("monti_results", monti_staar_name_dict[pheno_choice], ".Rds")))  %>% 
+  filter(Trait != 'WHR') %>%
+  mutate(Method = 'Monti et al.') %>%
+  mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>% 
+  filter(Trait %in% pheno_names_to_keep)
+monti_res_quant %>% distinct(Trait)
+
+
+assertthat::assert_that(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_monti_quant %>% distinct(Trait) %>% pull(Trait)))
+assertthat::assert_that(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), monti_res_quant %>% distinct(Trait) %>% pull(Trait)))
+
+all_traits_count = sum(counts_monti_quant %>% filter(is_single_trait == 'True') %>% pull(n))
+counts_monti_quant = counts_monti_quant %>% mutate(n = ifelse(Trait == 'All traits',all_traits_count, n))
+```
+
+## Load STAAR results
+
+
+```{r}
+counts_staar_quant = readRDS(file.path(staar_quant_dir, paste0("sig_counts_staar", monti_staar_name_dict[pheno_choice], ".Rds"))) %>% 
+  filter(Trait != 'WHR') %>%
+  mutate(Method = 'STAAR')  %>%
+  rename(n = discoveries) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) %>%
+  mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>%
+  filter(Trait %in% pheno_names_to_keep)
+
+all_traits_count = sum(counts_staar_quant %>% filter(is_single_trait == 'True') %>% pull(n))
+counts_staar_quant = counts_staar_quant %>% mutate(n = ifelse(Trait == 'All traits',all_traits_count, n))
+
+
+staar_res_quant = readRDS(file.path(staar_quant_dir, paste0("staar_corrected", monti_staar_name_dict[pheno_choice], ".Rds")))  %>% 
+  filter(Trait != 'WHR') %>%
+  mutate(Method = 'STAAR') %>%
+  mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>% 
+  filter(Trait %in% pheno_names_to_keep)  %>%
+  drop_na(pval) %>%
+  mutate(pval = as.numeric(pval))
+
+
+
+assertthat::assert_that(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_staar_quant %>% distinct(Trait) %>% pull(Trait)))
+assertthat::assert_that(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), staar_res_quant %>% distinct(Trait) %>% pull(Trait)))
+```
+
+
+
+## Combine quantiative counts results
+
+```{r} 
+all_counts_quant =  rbind(counts_deeprvat_quant, counts_monti_quant, counts_staar_quant) %>%
+  mutate(Method = factor(Method, levels=methods)) %>%
+  mutate(Trait = as.character(Trait)) %>%
+mutate(Trait = recode(Trait, !!!phenotype_renamer))  %>%  
+  mutate(pheno_group = case_when(
+    Trait %in% names(old_quant_phenotypes) ~ 'old',
+    Trait %in% names(new_quant_phenotypes) ~ 'new',
+    TRUE ~ 'all'
+  )) 
+
+all_counts_quant %>% distinct(Trait, pheno_group)
+all_counts_quant %>% filter(Trait == "All traits")
+all_counts_quant %>% filter(Trait != "All traits")
+levels(all_counts_quant$Method)
+all_counts_quant
+```
+
+```{r}
+all_counts_quant %>% distinct(pheno_group)
+all_counts_quant %>% filter(pheno_group == 'Training Trait') %>% 
+  filter(Method != 'STAAR')
+```
+
+## group quantiative counts
+```{r}
+
+flattened_quant_trait_grouping <- stack(quant_trait_grouping) %>%
+  mutate(ind = gsub('\\d+', '', ind))
+quant_trait_grouping = flattened_quant_trait_grouping [['ind']]
+names(quant_trait_grouping) = flattened_quant_trait_grouping[['values']]
+quant_trait_grouping
+
+setdiff(all_counts_quant %>% distinct(Trait) %>% pull(Trait), names(quant_trait_grouping))
+all_counts_quant = all_counts_quant %>% mutate(trait_group = quant_trait_grouping[as.character(Trait)]) %>%
+  mutate(pheno_group = phenotype_old_new_dict[as.character(Trait)]) %>%
+  mutate(pheno_group =  factor(pheno_group, levels = c('Training Trait', 'New Trait')))
+
+grouped_counts_by_pheno_group = all_counts_quant %>% filter(is_single_trait == 'True') %>%
+  group_by(Method, trait_group, pheno_group) %>%
+  summarise(n = sum(n)) %>%
+  ungroup()
+grouped_counts_all_pheno_group = all_counts_quant %>% filter(is_single_trait == 'True') %>%
+  group_by(Method, pheno_group) %>%
+  summarise(n = sum(n)) %>%
+  ungroup() %>%
+  mutate(trait_group = 'All Traits')
+grouped_counts = rbind(grouped_counts_by_pheno_group, grouped_counts_all_pheno_group)  
+grouped_counts %>% filter(pheno_group == 'All Traits')
+
+trait_counts = all_counts_quant %>% filter(is_single_trait == 'True') %>%
+  select(pheno_group, Trait, trait_group) %>%
+  distinct() %>%
+  group_by(trait_group, pheno_group) %>%
+  summarise(n_phenotypes = n()) %>%
+  mutate(trait_with_count = paste0(trait_group, ' (',n_phenotypes, ')' ))
+
+trait_counts = rbind(trait_counts, all_counts_quant %>% filter(is_single_trait == 'True') %>%
+  select(pheno_group, Trait) %>%
+  distinct() %>%
+  group_by(pheno_group) %>%
+  summarise(n_phenotypes = n()) %>% 
+  mutate(trait_group = 'All Traits')) %>%
+  mutate(trait_with_count = paste0(trait_group, ' (',n_phenotypes, ')' ))
+
+trait_counts
+
+grouped_counts = grouped_counts %>% left_join(trait_counts)
+grouped_counts = grouped_counts %>% mutate(is_single_trait = ifelse(trait_group  == 'All Traits', FALSE, TRUE)) 
+```
+
+# Figure 3 plots
+
+```{r}
+plot_list = list()
+
+```
+
+```{r}
+trait_title_dict = c('Training Trait' = 'Traits used in gene impairment module training', 'New Trait' = 'Traits not used in gene impairment module training')
+for (t_group in c('Training Trait', 'New Trait')){
+  p = ggplot(
+        grouped_counts %>% filter(pheno_group == t_group & Method %in% main_methods),
+        aes(
+          x=trait_with_count,
+          y=n,
+          fill=Method,
+        )
+    ) + 
+    geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+    labs(y = "Significant gene-trait associations", title = trait_title_dict[[t_group]]) +
+    theme_classic() +
+    # facet_grid(.~is_single_trait, scales='free', space = 'free') + #,  space = "free_x") +
+    ggforce::facet_row(vars(is_single_trait), scales = 'free', space = 'free') +
+    # theme_cowplot() +
+    base_theme +
+      theme(
+        axis.text.x=element_text(angle=45, vjust=1, hjust=1),
+        plot.title = element_text(hjust = 0.5, size = title_font_size),
+        axis.title.x=element_blank(),
+        legend.key.size=unit(0.5, "line"),
+        legend.position = "none",
+        panel.spacing=unit(0.75, "cm"),
+         strip.background = element_blank(),
+        strip.text = element_blank(),
+        plot.margin = margin(1, 1, 1, 1, "cm"),
+    ) +
+    scale_fill_manual(values = colors) +
+    scale_y_continuous(expand = expansion(mult = c(0, .1))) 
+  print(p)
+  plot_list[[paste('quant_discoveries', gsub(' ', '_', t_group), sep = "_")]] = p
+}
+grouped_counts %>% filter(trait_group == 'All Traits')
+(155 - 69)/69
+```
+
+
+
+
+# Replication training traits
+Here we only check the replication on the training phenotypes
+
+```{r}
+pheno_suffix = '_training_phenotypes'
+
+replication_file_staar = file.path(staar_quant_dir, paste0('replication_staar', pheno_suffix, '.Rds'))
+replication_file_monti = file.path(monti_quant_dir, paste0('replication_monti', pheno_suffix, '.Rds'))
+replication_file_deeprvat = file.path(results_dir, "replication" ,paste0("replication", pheno_suffix, ".parquet"))
+replication_data = readReplicationData(replication_file_staar, replication_file_monti, replication_file_deeprvat)
+replication_plot = makeReplicationPlot(replication_data %>% filter(Method %in% main_methods), max_rank = 1000)
+replication_plot
+
+plot_list[['replication_training']] = replication_plot
+```
+
+
+
+# binary phenotypes
+```{r}
+phenotypes_df = read_parquet('phenotypes.parquet') %>%
+   mutate_all(as.numeric) %>%
+  mutate_all(~replace(., is.na(.), 0))
+case_counts = colSums(phenotypes_df[binary_phenotypes])
+case_counts = tibble('Trait' = names(case_counts), 'n_cases' = case_counts)
+case_counts = case_counts %>%  mutate(Trait = str_replace_all(Trait, "_", " "))
+
+```
+
+```{r}
+all_deeprvat_binary_res = loadDeepRVATResults(results_dir = results_deeprvat_binary_dir, 
+                                       phenotypes =  gsub(' ', '_', binary_phenotypes), 
+                                       phenotype_renamer = c())
+counts_deeprvat_binary = all_deeprvat_binary_res[['counts']]
+significant_deeprvat_binary = all_deeprvat_binary_res[['significant']]
+results_deeprvat_binary = all_deeprvat_binary_res[['results']]
+pheno_names_to_keep = all_deeprvat_binary_res[['pheno_names_to_keep']]
+
+#add zero counts for traits that are zero for all methods so we don't loose them
+zero_count_traits = setdiff(unique(results_deeprvat_binary[['Trait']]), unique(counts_deeprvat_binary[['Trait']]))
+for (trait in zero_count_traits){
+  print(paste('adding zero counts for Trait', trait))
+  counts_deeprvat_binary = rbind(counts_deeprvat_binary, 
+                           counts_deeprvat_binary %>% filter(Trait == 'All traits') %>% mutate(Trait = trait) %>%
+    mutate(n = 0))
+}
+
+counts_deeprvat_binary[is.na(counts_deeprvat_binary$is_single_trait), "is_single_trait"] <- "True"
+
+lambda_deeprvat_binary = compute_lambda(results_deeprvat_binary %>% group_by(Trait, Method)) %>% ungroup()
+counts_deeprvat_binary_with_qc = counts_deeprvat_binary %>% left_join(lambda_deeprvat_binary) %>% 
+  left_join(case_counts) %>%
+  select(Trait, Method, n,lambda_gc, n_cases) %>% 
+  arrange(desc(lambda_gc))
+```
+
+```{r}
+counts_deeprvat_binary_with_qc
+plot_counts = counts_deeprvat_binary_with_qc %>% 
+  filter(grepl('Jurgens', Trait)) %>%
+  mutate(Trait = gsub('Jurgens ', '', Trait))
+
+```
+
+```{r}
+binary_trait_grouping_tibble
+```
+
+
+```{r}
+
+plot_counts_grouped = plot_counts %>% 
+  left_join(binary_trait_grouping_tibble) %>% 
+  group_by(binary_trait_grouping, Method) %>% 
+  summarise(n = sum(n), n_conditions = n()) %>%
+  ungroup()
+n_binary_traits = sum(plot_counts_grouped %>% select(binary_trait_grouping, n_conditions) %>% distinct() %>% pull(n_conditions))
+
+plot_counts_grouped_all_traits = plot_counts_grouped %>% group_by(Method) %>% 
+  summarise(n = sum(n)) %>% 
+  ungroup() %>%
+  mutate(n_conditions = n_binary_traits) %>%
+  mutate(binary_trait_grouping = 'All Traits')
+
+plot_counts_grouped = rbind(plot_counts_grouped, plot_counts_grouped_all_traits) %>% 
+  mutate(trait_with_count = paste0(binary_trait_grouping, ' (', n_conditions,  ')')) %>%
+  filter(Method %in% binary_methods) %>%
+  mutate(Method = factor(Method, levels = binary_methods)) %>%
+  mutate(is_single_trait = ifelse(binary_trait_grouping == 'All Traits', FALSE, TRUE))
+```
+
+
+# Calibration on new phenotypes (Binary and quantitative)
+
+## Load Monti and STAAR pvals for binary traits
+
+```{r}
+monti_res_binary = readRDS(file.path(monti_res_binary_dir, 'monti_results.Rds')) %>%
+  mutate(Trait = str_replace_all(Trait, "_", " ")) %>%
+  mutate(Method = 'Monti et al.')
+
+counts_monti_binary =  readRDS(file.path(monti_res_binary_dir, "monti_counts.Rds")) %>% 
+  mutate(Method = 'Monti et al.') %>%
+  mutate(Trait = str_replace_all(gsub('Jurgens_', '', Trait), "_", " ")) %>%
+  rename(n = discoveries) %>%
+  filter(Trait != 'All traits')
+
+staar_res_binary = readRDS(file.path(staar_res_binary_dir, "staar_corrected.Rds")) %>%
+  mutate(Trait = str_replace_all(Trait, "_", " ")) %>%
+  drop_na(pval) %>%
+  mutate(pval = as.numeric(pval)) %>%
+  mutate(Method = 'STAAR') 
+
+counts_staar_binary = readRDS(file.path(staar_res_binary_dir, "sig_counts_staar.Rds")) %>% 
+  mutate(Method = 'STAAR')  %>%
+  rename(n = discoveries) %>%
+  mutate(Trait = str_replace_all(gsub('Jurgens_', '', Trait), "_", " ")) %>%
+  filter(Trait != 'All traits')
+```
+
+
+```{r}
+pval_cols = c('Trait', 'gene', 'pval', 'Method')
+all_binary_pvals = rbind(results_deeprvat_binary[pval_cols],
+                         monti_res_binary[pval_cols], staar_res_binary[pval_cols])%>%
+  mutate(trait_group = 'Binary')
+
+new_phenotypes = c(all_binary_pvals %>% distinct(Trait) %>% pull(Trait),  names(new_quant_phenotypes))
+all_pvals_quant = rbind(results_deeprvat_quant %>% 
+                            select(all_of(pval_cols)),
+                           monti_res_quant %>% select(all_of(pval_cols)), 
+                           staar_res_quant %>% select(all_of(pval_cols))
+                           ) %>%
+  mutate(trait_group = 'Quantitative')
+
+write_parquet(all_pvals_quant, 'all_pvals_quant.parquet')
+all_pvals = rbind(all_binary_pvals, all_pvals_quant)
+
+all_lambda = compute_lambda(all_pvals %>% group_by(Trait, Method, trait_group)) %>% ungroup() %>%
+  mutate(Method = factor(Method, levels = methods)) %>%
+  mutate(Trait = gsub('Jurgens ', '', Trait))
+all_lambda %>% distinct(Trait)
+
+
+```
+
+```{r}
+assertthat::assert_that(setequal(plot_counts %>% distinct(Trait) %>% pull(Trait), counts_staar_binary %>% distinct(Trait) %>% pull(Trait)))
+assertthat::assert_that(setequal(plot_counts %>% distinct(Trait) %>% pull(Trait), counts_monti_binary %>% distinct(Trait) %>% pull(Trait)))
+counts_staar_binary
+binary_counts_with_qc = rbind(counts_monti_binary, counts_staar_binary) %>% left_join(all_lambda %>% select(Trait, Method, lambda_gc)) %>%
+  left_join(plot_counts %>% select(Trait, n_cases)) %>%
+  rbind(plot_counts)
+saveRDS(binary_counts_with_qc, 'binary_counts_with_qc.Rds') # used for plotting supp. figures
+```
+
+
+# Generate all plots
+
+```{r}
+trait_title_dict = c('Training Trait' = 'Traits used in gene impairment module training', 'New Trait' = 'Traits not used in gene impairment module training')
+for (t_group in c('Training Trait', 'New Trait')){
+  p = ggplot(
+        grouped_counts %>% filter(pheno_group == t_group & Method %in% main_methods),
+        aes(
+          x=trait_with_count,
+          y=n,
+          fill=Method,
+        )
+    ) + 
+    geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+    labs(y = "Significant gene-trait associations", title = trait_title_dict[[t_group]]) +
+    theme_classic() +
+    # facet_grid(.~is_single_trait, scales='free', space = 'free') + #,  space = "free_x") +
+    ggforce::facet_row(vars(is_single_trait), scales = 'free', space = 'free') +
+    base_theme_wo_strip +
+      theme(
+        axis.text.x=element_text(angle=45, vjust=1, hjust=1),
+        plot.title = element_text(hjust = 0.5, size = title_font_size),
+        axis.title.x=element_blank(),
+        legend.key.size=unit(0.5, "line"),
+        legend.text = element_text(size = 12),
+        panel.spacing=unit(0.75, "cm"),
+         strip.background = element_blank(),
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, .1))) 
+  if (t_group == 'Training Trait'){
+    p = p + 
+      scale_fill_manual(values = colors,  guide = guide_legend(
+      direction = "horizontal", nrow = 2
+    )) + theme(legend.position = c(0.65, 0.8)) 
+  }else{
+    p = p + theme(legend.position = 'none') +
+       scale_fill_manual(values = colors) 
+  }
+  
+  print(p)
+  plot_list[[paste('quant_discoveries', gsub(' ', '_', t_group), sep = "_")]] = p
+}
+grouped_counts %>% filter(trait_group == 'All Traits')
+```
+
+
+```{r}
+replication_plot = makeReplicationPlot(replication_data %>% filter(Method %in% main_methods), max_rank = 1000)
+replication_plot
+
+plot_list[['replication_training']] = replication_plot 
+```
+
+
+```{r}
+counts_grouped_traits = ggplot(
+      plot_counts_grouped %>%
+         filter(Method %in% c( 'Burden/SKAT combined', 'DeepRVAT')),
+      aes(
+        x=trait_with_count,
+        y=n,
+        fill=Method,
+      )
+  ) + 
+  geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+  labs(y = "Significant gene-trait associations", title = 'Binary traits') +
+  theme_classic() +
+  # facet_grid(.~is_single_trait, scales='free', space = 'free') + #,  space = "free_x") +
+  ggforce::facet_row(vars(is_single_trait), scales = 'free', space = 'free') +
+  base_theme_wo_strip +
+    theme(
+      axis.text.x=element_text(angle=45, vjust=1, hjust=1),
+      plot.title = element_text(hjust = 0.5, size = title_font_size),
+      axis.title.x=element_blank(),
+      legend.key.size=unit(0.5, "line"),
+      legend.position = "none",
+      panel.spacing=unit(0.75, "cm"),
+       strip.background = element_blank(),
+      strip.text = element_blank()
+      # plot.margin = margin(1, 1, 1, 1, "cm"),
+  ) +
+  scale_fill_manual(values = colors) +
+  scale_y_continuous(expand = expansion(mult = c(0, .1))) 
+counts_grouped_traits
+
+binary_legend = ggplot(
+      plot_counts_grouped %>%
+         filter(Method %in% c( 'Burden/SKAT combined', 'DeepRVAT')),
+      aes(
+        x=trait_with_count,
+        y=n,
+        fill=Method,
+      )
+  ) + 
+  geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+  labs(y = "Significant gene-trait associations", title = 'Binary traits') +
+  theme_classic() +
+  # facet_grid(.~is_single_trait, scales='free', space = 'free') + #,  space = "free_x") +
+  ggforce::facet_row(vars(is_single_trait), scales = 'free', space = 'free') +
+  base_theme_wo_strip +
+    theme(
+      axis.text.x=element_text(angle=45, vjust=1, hjust=1),
+      plot.title = element_text(hjust = 0.5),
+      axis.title.x=element_blank(),
+      legend.key.size=unit(0.5, "line"),
+      legend.position = "none",
+      panel.spacing=unit(0.75, "cm"),
+       strip.background = element_blank(),
+      strip.text = element_blank()
+      # plot.margin = margin(1, 1, 1, 1, "cm"),
+  ) +
+  scale_fill_manual(values = colors) +
+  scale_y_continuous(expand = expansion(mult = c(0, .1))) 
+binary_legend
+plot_list[['binary_counts']] = counts_grouped_traits
+```
+
+
+```{r}
+main_methods = c('Burden/SKAT combined', "Monti et al.", "STAAR", 'DeepRVAT')
+main_methods_short = c('B/S', 'M', 'ST', 'D')
+main_methods_short = c('Burden/SKAT \n combined', "Monti et al.", "STAAR", 'DeepRVAT')
+names(main_methods_short) = main_methods
+p_lambda = ggplot(all_lambda %>% filter(Method %in% main_methods) %>% 
+                  filter(Trait %in% new_phenotypes), 
+                  aes(x = Method , y = lambda_gc, color = Method)) +
+  facet_wrap(vars(trait_group)) +
+  geom_jitter() +
+  geom_boxplot() +
+  # theme_cowplot() +
+  theme_classic() +
+  base_theme+
+  theme(
+      axis.text.x = element_text(angle = 45,  hjust =1, size = font_size)
+      ) +
+  scale_color_manual(values = colors) +
+  scale_x_discrete(breaks = names(main_methods_short), labels = main_methods_short) +
+  guides(color = FALSE) +
+  labs(x = '', y = 'Lambda GC')
+p_lambda
+```
+
+```{r}
+df = all_pvals %>% filter(Trait %in% new_phenotypes) %>% filter(Method %in% main_methods)
+df = df %>%
+  group_by(Method, trait_group) %>%
+  arrange(pval) %>%
+  mutate(`-log10pval_expected` = -log10(1:n() / n())) %>%
+  ungroup()
+
+# Check if '-log10pval' column exists, if not, add it
+if (!('-log10pval' %in% colnames(df))) {
+  df <- df %>%
+    mutate(`-log10pval` = -log10(pval))
+}
+
+
+```
+
+```{r}
+#sample data to make plotting faster
+sample_data <- function(df) {
+  df %>%
+    group_by(Method) %>%
+    mutate(sample_percent = ifelse(`-log10pval_expected` < 2, 0.10, 0.5)) %>%
+    filter(runif(n()) < sample_percent)
+}
+
+# Sample the data --> Comment this in if you want to make the qqplot plotting faster
+# df_sub <- df %>%
+#   sample_data()
+df_sub = df
+nrow(df)
+#show all values > max_val as triangles
+max_val_binary = 30
+max_val_quantitative = 50
+
+df_sub <- df_sub %>%
+  mutate(
+    shape = case_when(
+      trait_group == 'Binary' &  `-log10pval` > max_val_binary ~ 'triangle',
+      trait_group == 'Binary' &  `-log10pval` <= max_val_binary ~ 'circle',
+      trait_group == 'Quantitative' &  `-log10pval` > max_val_quantitative ~ 'triangle',
+      trait_group == 'Quantitative' &  `-log10pval` <= max_val_quantitative ~ 'circle',
+      TRUE ~ NA_character_
+    ),
+     `-log10pval` = case_when(
+      (trait_group == 'Binary' &  `-log10pval` > max_val_binary) |
+      (trait_group == 'Quantitative' &  `-log10pval` > max_val_quantitative) ~ max_val_binary,
+      TRUE ~  `-log10pval`
+    )
+  ) %>%
+  mutate(alpha = ifelse(`-log10pval_expected` < 4, 'alpha_low', 'alpha_high'))
+qq_p = ggplot(df_sub, aes(x = `-log10pval_expected`, y = `-log10pval`, color = Method, fill = Method, shape = shape, size = shape)) + #, alpha = `-log10pval_expected`)) +
+    labs(x = TeX("$Expected -log_{10}(P)$"), y = TeX("$Observed -log_{10}(P)$")) +
+    facet_wrap(vars(trait_group), scales = 'free') +
+    geom_abline(intercept = 0, slope = 1, color = 'darkgrey') +
+    geom_point(alpha = 0.6) +
+    ylim(0, 30) +
+    theme_classic() +
+    base_theme_wo_margin +
+    theme(legend.position = 'none',#,
+          ) +
+    scale_color_manual(values = colors) +
+    scale_fill_manual(values = colors) +
+    scale_shape_manual(values = c('triangle' = 17,'circle' = 19)) +
+    scale_size_manual(values = c('triangle' = 1.5,'circle' = 0.5)) 
+
+
+```
+
+
+
+
+## timing plot
+```{r}
+this_df_x_fold = readRDS(file.path(timing_data_dir, paste0('timing_data_x_fold_60_pheno.Rds'))) #generate using deeprvat-analysis/timing/timing.Rmd
+
+plot_colors_deeprvat = c('Monti' = "aquamarine4", 'STAAR' = '#E6AB02','DeepRVAT (with training)' = '#7A2961', 'DeepRVAT (pre-trained)' = '#7A2961')
+plot_rename = c('Monti' = "Monti", 'STAAR' = 'STAAR','DeepRVAT (with training)' = 'DeepRVAT\n(with training)', 'DeepRVAT (pre-trained)' = 'DeepRVAT\n(pre-trained)')
+days = c(1,  4,  16, 32, 64, 128)
+days_sec = days * (3600*24)
+
+# p_pheno_x_fold = 
+ p_pheno_x_fold = ggplot(this_df_x_fold %>% filter(mode == 'time_test' ) ,
+       aes(x = Method, y = time, color = Method, fill = Method)) +
+  geom_bar(stat="identity") +
+  geom_line() +
+  scale_color_manual(values = plot_colors_deeprvat, guide = 'none') + 
+  scale_fill_manual(values = plot_colors_deeprvat, guide = 'none') + 
+  geom_text(aes(label=time_x_val),vjust=-1, size = 3.5) + 
+  labs(y = paste('Testing time for 60 phenotypes [d]'), x = '', color = '') +
+  scale_y_continuous(breaks = days_sec, labels = paste0(days, 'd'), expand = expansion(mult = c(0,0.3)))+ #, limits = c(0, max(days_sec))) +
+  theme_classic() +
+  base_theme_wo_margin +
+  scale_x_discrete(breaks = names(plot_rename), labels = plot_rename) +
+  theme(
+        axis.text.x = element_text(angle = 45,  hjust =1, size = font_size)
+        )
+
+p_pheno_x_fold
+
+```
+
+
+
+
+```{r}
+label_size = 25
+label_specs = list(size = label_size, color = "black", face = "bold", family = NULL)
+p = ggarrange(
+  ggarrange(plot_list[['quant_discoveries_Training_Trait']], plot_list[['replication_training']] + theme(plot.margin = margin(1, 1, 2.5, 1, "cm")), align = 'h', widths = c(0.6, 0.4), labels = c('a', 'b'), font.label = label_specs,
+            nrow = 1),
+ggarrange(NA, NA, widths = c(0.235, 0.8), labels = c('c','d'),font.label = label_specs),
+ggarrange(p_pheno_x_fold, p_lambda, qq_p + theme(plot.margin = margin(0.1, 0.25, 1.6, 0.25, "cm")), 
+          widths = c(0.25,  0.3, 0.55), align = 'h', nrow = 1) , #labels = c('c', NA, 'd', NA),font.label = label_specs),
+ggarrange(plot_list[['quant_discoveries_New_Trait']], plot_list[['binary_counts']], align = 'h', labels = c('e', 'f'), font.label = label_specs), 
+nrow = 4, heights = c(0.95, 0.1, 0.75, 0.95)
+)
+
+width = 12
+# ggsave('figure3.jpg', p, width = width , height = 1.2*width)
+# ggsave('figure3.png', p, width = width , height = 1.2*width)
+
+```
+
+
