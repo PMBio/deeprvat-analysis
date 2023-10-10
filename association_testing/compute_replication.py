@@ -63,7 +63,6 @@ METHODS = list(
 
 
 def read_comparison_results(comparison_dir: str, gene_df: pd.DataFrame, pheno: str):
-    pheno = 'IGF_1'
     phenocode_df = pd.read_parquet("phenocodes.parquet", engine="pyarrow")
     pheno = 'IGF-1' if pheno == 'IGF_1' else pheno
     phenocode_dict = {
