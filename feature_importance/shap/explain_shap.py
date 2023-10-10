@@ -30,14 +30,8 @@ import re
 import shap
 from matplotlib import pyplot
 
-import genopheno.aggregation_metrics.agg_models as agg_models
-import genopheno.aggregation_metrics.pl_models as pl_models
-from genopheno.aggregation_metrics.learn_burden import PhenotypeModel
-from genopheno.data import DenseGTDataset
-from genopheno.train import GenoPheno
-from genopheno.utils import suggest_batch_size
-from seak import scoretest
 
+import deeprvat.deeprvat.models as pl_models
 
 
 logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s: %(message)s',
@@ -380,7 +374,6 @@ def compute_shap_values(config,
     
     sampling_batch_no = int(sampling_batch_no)
     samples = slice(None) ## no need for loading from file for now?
-    
 
     train_batch_size = 3000
     val_batch_size = 1000
@@ -388,82 +381,84 @@ def compute_shap_values(config,
     shap_covs = {}
     shap_annots = {}
     for pheno in config['phenotypes'].keys():
-        logging.info(f'Loading data for = {pheno}.')
-        data = dict()
-        data[pheno] = dict()
-        input_tensor_file = f'{input_dir}/{pheno}/deeprvat/input_tensor.zarr'
-        covariates_file =f'{input_dir}/{pheno}/deeprvat/covariates.zarr'
-        y_file = f'{input_dir}/{pheno}/deeprvat/y.zarr'
-        training_gene_file = f'{input_dir}/{pheno}/deeprvat/seed_genes.parquet'
         
-        
-        if training_gene_file is not None:
-            training_genes = pd.read_parquet(training_gene_file, 
-                                             engine='pyarrow')
-            #logging.info(training_genes)
-        else:
-            training_genes = None
-            
-        data[pheno]["training_genes"] = training_genes
-        #training_genes_ix = list(training_genes['id'])
-        input_tensor = torch.tensor(zarr.open(input_tensor_file,  mode='r')[:])
-        #if sampling_batch_no * sample_size < input_tensor.shape[0]:
-        data[pheno]["input_tensor_zarr"] =  input_tensor
-        data[pheno]["covariates"] = torch.tensor(
-            zarr.open(covariates_file, mode='r')[:])
-        data[pheno]["y"] = torch.tensor(zarr.open(y_file,
-                                                  mode='r')[:])
-
-        logging.info(data[pheno]["input_tensor_zarr"].shape)
-        logging.info(data[pheno]["covariates"].shape)
-        logging.info(data[pheno]["y"].shape)
-
-        
-        dm = MultiphenoBaggingData( 
-                             data, 
-                             train_proportion = 0.75,
-                             sample_with_replacement = True,
-                             min_variant_count = 1,
-                             upsampling_factor = 1,  
-                             batch_size = None,
-                             train_batch_size = train_batch_size, 
-                             val_batch_size = val_batch_size)
-    
-        train_dl = dm.train_dataloader()
-        val_dl = dm.val_dataloader()     
-
-        tr_dl_iterator = iter(train_dl)
-        for i in range(int(sampling_batch_no)):
-            try:
-                background = next(tr_dl_iterator)
-            except StopIteration:
-                tr_dl_iterator = iter(train_dl)
-                background = next(tr_dl_iterator)
-
-        val_dl_iterator = iter(val_dl)
-        for i in range(int(sampling_batch_no)):
-            try:
-                test = next(val_dl_iterator)
-            except StopIteration:
-                val_dl_iterator = iter(val_dl)
-                test = next(val_dl_iterator)
+        if os.path.exists(f'{input_dir}/{pheno}'):
+            logging.info(f'Loading data for = {pheno}.')
+            data = dict()
+            data[pheno] = dict()
+            input_tensor_file = f'{input_dir}/{pheno}/deeprvat/input_tensor.zarr'
+            covariates_file =f'{input_dir}/{pheno}/deeprvat/covariates.zarr'
+            y_file = f'{input_dir}/{pheno}/deeprvat/y.zarr'
+            training_gene_file = f'{input_dir}/{pheno}/deeprvat/seed_genes.parquet'
 
 
-        logging.info(background.keys())
-        logging.info(f'Training shap explainer, pheno= {pheno}.')
-        logging.info(background[pheno]['rare_variant_annotations'].shape)
-        e = shap.DeepExplainer(complete_models[pheno], 
-                                   [ background[pheno]['rare_variant_annotations'], 
-                                     background[pheno]['covariates']] )
-        
-        logging.info(f'Generating shap values, pheno= {pheno}.')
-        logging.info(test[pheno]['rare_variant_annotations'].shape)
-        shap_values = e.shap_values( [test[pheno]['rare_variant_annotations'], 
-                                              test[pheno]['covariates']] )
+            if training_gene_file is not None:
+                training_genes = pd.read_parquet(training_gene_file, 
+                                                 engine='pyarrow')
+                #logging.info(training_genes)
+            else:
+                training_genes = None
 
-        logging.info(shap_values[0].shape)
-        shap_covs[pheno]=shap_values[1]
-        shap_annots[pheno]=shap_values[0]
+            data[pheno]["training_genes"] = training_genes
+            #training_genes_ix = list(training_genes['id'])
+            input_tensor = torch.tensor(zarr.open(input_tensor_file,  mode='r')[:])
+            #if sampling_batch_no * sample_size < input_tensor.shape[0]:
+            data[pheno]["input_tensor_zarr"] =  input_tensor
+            data[pheno]["covariates"] = torch.tensor(
+                zarr.open(covariates_file, mode='r')[:])
+            data[pheno]["y"] = torch.tensor(zarr.open(y_file,
+                                                      mode='r')[:])
+
+            logging.info(data[pheno]["input_tensor_zarr"].shape)
+            logging.info(data[pheno]["covariates"].shape)
+            logging.info(data[pheno]["y"].shape)
+
+
+            dm = MultiphenoBaggingData( 
+                                 data, 
+                                 train_proportion = 0.75,
+                                 sample_with_replacement = True,
+                                 min_variant_count = 1,
+                                 upsampling_factor = 1,  
+                                 batch_size = None,
+                                 train_batch_size = train_batch_size, 
+                                 val_batch_size = val_batch_size)
+
+            train_dl = dm.train_dataloader()
+            val_dl = dm.val_dataloader()     
+
+            tr_dl_iterator = iter(train_dl)
+            for i in range(int(sampling_batch_no)):
+                try:
+                    background = next(tr_dl_iterator)
+                except StopIteration:
+                    tr_dl_iterator = iter(train_dl)
+                    background = next(tr_dl_iterator)
+
+            val_dl_iterator = iter(val_dl)
+            for i in range(int(sampling_batch_no)):
+                try:
+                    test = next(val_dl_iterator)
+                except StopIteration:
+                    val_dl_iterator = iter(val_dl)
+                    test = next(val_dl_iterator)
+
+
+            logging.info(background.keys())
+            logging.info(f'Training shap explainer, pheno= {pheno}.')
+            logging.info(background[pheno]['rare_variant_annotations'].shape)
+            e = shap.DeepExplainer(complete_models[pheno], 
+                                       [ background[pheno]['rare_variant_annotations'], 
+                                         background[pheno]['covariates']] )
+
+            logging.info(f'Generating shap values, pheno= {pheno}.')
+            logging.info(test[pheno]['rare_variant_annotations'].shape)
+            shap_values = e.shap_values( [test[pheno]['rare_variant_annotations'], 
+                                                  test[pheno]['covariates']] )
+
+            logging.info(shap_values[0].shape)
+            shap_covs[pheno]=shap_values[1]
+            shap_annots[pheno]=shap_values[0]
 
 
     with open(f'{out_dir}/{repeat_num}_shap_avg_annots.pkl', 'wb') as f:

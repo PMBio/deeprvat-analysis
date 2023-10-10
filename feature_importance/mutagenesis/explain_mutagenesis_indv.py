@@ -5,6 +5,8 @@ import math
 import pickle
 import os
 import sys
+import zarr
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from pprint import pformat, pprint
@@ -19,25 +21,13 @@ import torch
 import torch.nn as nn
 import statsmodels.api as sm
 import yaml
+
 from joblib import Parallel, delayed
 from numcodecs import Blosc
-from scipy.sparse import coo_matrix
-from statsmodels.tools.tools import add_constant
 from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm import tqdm
-import zarr
-import re
-import shap
-from matplotlib import pyplot
 
-import genopheno.aggregation_metrics.agg_models as agg_models
-import genopheno.aggregation_metrics.pl_models as pl_models
-from genopheno.aggregation_metrics.learn_burden import PhenotypeModel
-from genopheno.data import DenseGTDataset
-from genopheno.train import GenoPheno
-from genopheno.utils import suggest_batch_size
-from seak import scoretest
-
+import deeprvat.deeprvat.models as pl_models
 
 
 logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s: %(message)s',
@@ -139,8 +129,6 @@ class MultiphenoDataset(Dataset):
         samples_by_pheno = batch_samples.groupby("phenotype")
 
         # TODO: Use training genes
-        
-        ## HAKIME. you can bypass idx below
         result = dict()
         for pheno, df in samples_by_pheno:
             idx = df["index"].to_numpy()
@@ -361,127 +349,129 @@ def compute_model_predictions(config,
 
         
     for pheno in config['phenotypes'].keys():
-        logging.info(f'Loading data for = {pheno}.')
-        wildtype_data = dict()
-        wildtype_data[pheno] = dict()
-        mutated_data = dict()
-        mutated_data[pheno] = dict()
         
-        input_tensor_file = f'{input_dir}/{pheno}/deeprvat/input_tensor.zarr'
-        covariates_file =f'{input_dir}/{pheno}/deeprvat/covariates.zarr'
-        y_file = f'{input_dir}/{pheno}/deeprvat/y.zarr'
-        training_gene_file = f'{input_dir}/{pheno}/deeprvat/seed_genes.parquet'
-        
-        if training_gene_file is not None:
-            training_genes = pd.read_parquet(training_gene_file, 
-                                             engine='pyarrow')
-            #logging.info(training_genes)
-        else:
-            training_genes = None
-        
-        #training_genes_ix = list(training_genes['id'])
-        wildtype_data[pheno]["training_genes"] = training_genes
-        mutated_data[pheno]["training_genes"] = training_genes
-        
-        input_tensor = torch.tensor(zarr.open(input_tensor_file,  mode='r')[:])
-        input_covariates = torch.tensor(zarr.open(covariates_file, mode='r')[:])
-        input_y = torch.tensor(zarr.open(y_file, mode='r')[:])
-        #if sampling_batch_no * sample_size < input_tensor.shape[0]:
-
-        ######### Work in progress #################
-        binary_annot_ix = int(binary_annot_ix)
-        per_gene_diff = {f'gene_{i}':[]  
-                         for i in range(input_tensor.shape[1])}
-        for gene_ix in range(input_tensor.shape[1]):
-            ## using samples that has a_i ==1
-            sample_ix = (input_tensor[:, gene_ix, binary_annot_ix, :] == 1
-                                                            ).sum(dim=1) > 0
-            logging.info(f'All #samples {len(sample_ix)}')
-            logging.info(f'Gene {gene_ix}: #samples {sum(sample_ix)}')
+        if os.path.exists(f'{input_dir}/{pheno}'):
+            logging.info(f'Loading data for = {pheno}.')
+            wildtype_data = dict()
+            wildtype_data[pheno] = dict()
+            mutated_data = dict()
+            mutated_data[pheno] = dict()
             
-            if sum(sample_ix) > 1:
-                ## wildtype input for each gene
-                ## each time only one gene changes!
-                wildtype_gene_left = input_tensor[sample_ix, 0:gene_ix, :, :]
-                wildtype_gene_right = input_tensor[sample_ix, gene_ix+1:, :, :]
-                
-                input_wild_type = input_tensor[sample_ix, gene_ix, :, :]
-                input_wild_type = torch.unsqueeze(input_wild_type, dim=1)
-                
-                covarites_wild_type = input_covariates[sample_ix, :]
-                y_wild_type = input_y[sample_ix]
-                
-                #logging.info(f'Wild type: {input_wild_type.shape}')
-                wildtype_data[pheno]["input_tensor_zarr"] = input_tensor[
-                                                            sample_ix, :, :, :] 
-                wildtype_data[pheno]["covariates"] = covarites_wild_type
-                wildtype_data[pheno]["y"] = y_wild_type
-                
-                ## mutated input for each gene
-                mutated_left = input_wild_type[:, :, 0:binary_annot_ix, :]
-                mutated_right = input_wild_type[:, :, binary_annot_ix+1:, :]
-                mutated_annot = input_wild_type[:, :, binary_annot_ix, :].unsqueeze(dim=2)
-                mutated_annot[mutated_annot == 1, ] = 0
-                assert mutated_annot.sum() == 0, 'problem with mutagenesis'
-                
-                input_mutated = torch.cat((mutated_left, mutated_annot, mutated_right), dim=2)
-                logging.info(f'Mutated: {input_mutated.shape}')
-                complete_mutated = torch.cat((wildtype_gene_left, input_mutated,
-                                                      wildtype_gene_right), dim=1)
+            input_tensor_file = f'{input_dir}/{pheno}/deeprvat/input_tensor.zarr'
+            covariates_file =f'{input_dir}/{pheno}/deeprvat/covariates.zarr'
+            y_file = f'{input_dir}/{pheno}/deeprvat/y.zarr'
+            training_gene_file = f'{input_dir}/{pheno}/deeprvat/seed_genes.parquet'
 
-                mutated_data[pheno]["input_tensor_zarr"] =  complete_mutated
-                mutated_data[pheno]["covariates"] = covarites_wild_type
-                mutated_data[pheno]["y"] = y_wild_type
-                
+            if training_gene_file is not None:
+                training_genes = pd.read_parquet(training_gene_file, 
+                                                 engine='pyarrow')
+                #logging.info(training_genes)
+            else:
+                training_genes = None
 
-                dm_wt = MultiphenoBaggingData( 
-                         wildtype_data, 
-                         train_proportion = 1,
-                         sample_with_replacement = True,
-                         min_variant_count = 1,
-                         upsampling_factor = 1,  
-                         batch_size = 128
-                        )
-                
-                dm_mut = MultiphenoBaggingData( 
-                         mutated_data, 
-                         train_proportion = 1,
-                         sample_with_replacement = True,
-                         min_variant_count = 1,
-                         upsampling_factor = 1,  
-                         batch_size = 128
-                        )
-                
+            #training_genes_ix = list(training_genes['id'])
+            wildtype_data[pheno]["training_genes"] = training_genes
+            mutated_data[pheno]["training_genes"] = training_genes
 
-                ##### do model prediction 
-                val_dl_wt = dm_wt.train_dataloader()   
-                val_dl_mt = dm_mut.train_dataloader()   
+            input_tensor = torch.tensor(zarr.open(input_tensor_file,  mode='r')[:])
+            input_covariates = torch.tensor(zarr.open(covariates_file, mode='r')[:])
+            input_y = torch.tensor(zarr.open(y_file, mode='r')[:])
+            #if sampling_batch_no * sample_size < input_tensor.shape[0]:
 
-                for i, bag in enumerate(agg_models):
-                    logging.info(f'Predictions for bag= {i}.')
-                    wt_preds_by_bag, mt_preds_by_bag = [], []
-                    #with torch.no_grad():
-                    for test in val_dl_wt:
-                        predictions = bag(test)[pheno] #dim=2
-                        predictions = predictions.detach().numpy() 
-                        wt_preds_by_bag.append(predictions)
+            ######### Work in progress #################
+            binary_annot_ix = int(binary_annot_ix)
+            per_gene_diff = {f'gene_{i}':[]  
+                             for i in range(input_tensor.shape[1])}
+            for gene_ix in range(input_tensor.shape[1]):
+                ## using samples that has a_i ==1
+                sample_ix = (input_tensor[:, gene_ix, binary_annot_ix, :] == 1
+                                                                ).sum(dim=1) > 0
+                logging.info(f'All #samples {len(sample_ix)}')
+                logging.info(f'Gene {gene_ix}: #samples {sum(sample_ix)}')
 
-                    for test in val_dl_mt:
-                        predictions = bag(test)[pheno] #dim=2
-                        predictions = predictions.detach().numpy() 
-                        mt_preds_by_bag.append(predictions)
+                if sum(sample_ix) > 1:
+                    ## wildtype input for each gene
+                    ## each time only one gene changes!
+                    wildtype_gene_left = input_tensor[sample_ix, 0:gene_ix, :, :]
+                    wildtype_gene_right = input_tensor[sample_ix, gene_ix+1:, :, :]
 
-                    #wt_preds_bag = np.asarray(wt_preds_by_bag, dtype=np.float32)
-                    wt_preds_bag = np.concatenate(wt_preds_by_bag)
-                    mt_preds_bag = np.concatenate(mt_preds_by_bag) #vstack
-                    logging.info(f'complete mutant_preds: {mt_preds_bag.shape}')
-                    logging.info(f'complete wildty_preds: {wt_preds_bag.shape}')
-                    per_sample_diff = np.absolute(wt_preds_bag - mt_preds_bag).squeeze()
-                    
-                    mean_sample_diff = sum(per_sample_diff) / len(per_sample_diff)
-                    per_gene_diff[f'gene_{gene_ix}'].append(mean_sample_diff)
-        
-        per_pheno_diff[pheno] = per_gene_diff
+                    input_wild_type = input_tensor[sample_ix, gene_ix, :, :]
+                    input_wild_type = torch.unsqueeze(input_wild_type, dim=1)
+
+                    covarites_wild_type = input_covariates[sample_ix, :]
+                    y_wild_type = input_y[sample_ix]
+
+                    #logging.info(f'Wild type: {input_wild_type.shape}')
+                    wildtype_data[pheno]["input_tensor_zarr"] = input_tensor[
+                                                                sample_ix, :, :, :] 
+                    wildtype_data[pheno]["covariates"] = covarites_wild_type
+                    wildtype_data[pheno]["y"] = y_wild_type
+
+                    ## mutated input for each gene
+                    mutated_left = input_wild_type[:, :, 0:binary_annot_ix, :]
+                    mutated_right = input_wild_type[:, :, binary_annot_ix+1:, :]
+                    mutated_annot = input_wild_type[:, :, binary_annot_ix, :].unsqueeze(dim=2)
+                    mutated_annot[mutated_annot == 1, ] = 0
+                    assert mutated_annot.sum() == 0, 'problem with mutagenesis'
+
+                    input_mutated = torch.cat((mutated_left, mutated_annot, mutated_right), dim=2)
+                    logging.info(f'Mutated: {input_mutated.shape}')
+                    complete_mutated = torch.cat((wildtype_gene_left, input_mutated,
+                                                          wildtype_gene_right), dim=1)
+
+                    mutated_data[pheno]["input_tensor_zarr"] =  complete_mutated
+                    mutated_data[pheno]["covariates"] = covarites_wild_type
+                    mutated_data[pheno]["y"] = y_wild_type
+
+
+                    dm_wt = MultiphenoBaggingData( 
+                             wildtype_data, 
+                             train_proportion = 1,
+                             sample_with_replacement = True,
+                             min_variant_count = 1,
+                             upsampling_factor = 1,  
+                             batch_size = 128
+                            )
+
+                    dm_mut = MultiphenoBaggingData( 
+                             mutated_data, 
+                             train_proportion = 1,
+                             sample_with_replacement = True,
+                             min_variant_count = 1,
+                             upsampling_factor = 1,  
+                             batch_size = 128
+                            )
+
+
+                    ##### do model prediction 
+                    val_dl_wt = dm_wt.train_dataloader()   
+                    val_dl_mt = dm_mut.train_dataloader()   
+
+                    for i, bag in enumerate(agg_models):
+                        logging.info(f'Predictions for bag= {i}.')
+                        wt_preds_by_bag, mt_preds_by_bag = [], []
+                        #with torch.no_grad():
+                        for test in val_dl_wt:
+                            predictions = bag(test)[pheno] #dim=2
+                            predictions = predictions.detach().numpy() 
+                            wt_preds_by_bag.append(predictions)
+
+                        for test in val_dl_mt:
+                            predictions = bag(test)[pheno] #dim=2
+                            predictions = predictions.detach().numpy() 
+                            mt_preds_by_bag.append(predictions)
+
+                        #wt_preds_bag = np.asarray(wt_preds_by_bag, dtype=np.float32)
+                        wt_preds_bag = np.concatenate(wt_preds_by_bag)
+                        mt_preds_bag = np.concatenate(mt_preds_by_bag) #vstack
+                        logging.info(f'complete mutant_preds: {mt_preds_bag.shape}')
+                        logging.info(f'complete wildty_preds: {wt_preds_bag.shape}')
+                        per_sample_diff = np.absolute(wt_preds_bag - mt_preds_bag).squeeze()
+
+                        mean_sample_diff = sum(per_sample_diff) / len(per_sample_diff)
+                        per_gene_diff[f'gene_{gene_ix}'].append(mean_sample_diff)
+
+            per_pheno_diff[pheno] = per_gene_diff
 
     pheno_results = dict()
     for pheno in per_pheno_diff.keys():

@@ -155,7 +155,7 @@ baseline_results:
         base: baseline_results
         type: plof/skat
     -
-        base: baseline_results
+        base: baseline_results #PATH_TO_BASELINE 
         type: missense/skat
 
 alpha: 0.05

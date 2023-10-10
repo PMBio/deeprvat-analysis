@@ -1,46 +1,38 @@
-import itertools
 import logging
 import sys
 from collections import OrderedDict
-from pathlib import Path
 from pprint import pprint
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
 import pytorch_lightning as pl
-from genopheno.metrics import PearsonCorr, PearsonCorrTorch, RSquared, AveragePrecisionWithLogits
-from pytorch_lightning.callbacks import (EarlyStopping, ModelCheckpoint,
-                                         ModelSummary)
+from pytorch_lightning.callbacks import ModelSummary
 
-logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s: %(message)s',
-                    level='INFO',
-                    stream=sys.stdout)
+from deeprvat.metrics import (
+    PearsonCorr,
+    PearsonCorrTorch,
+    RSquared,
+    AveragePrecisionWithLogits,
+)
+
+logging.basicConfig(
+    format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s",
+    level="INFO",
+    stream=sys.stdout,
+)
 logger = logging.getLogger(__name__)
 
 METRICS = {
-    'Huber': nn.SmoothL1Loss,
-    'MAE': nn.L1Loss,
-    'MSE': nn.MSELoss,
-    'RSquared': RSquared,
-    'PearsonCorr': PearsonCorr,
-    'PearsonCorrTorch': PearsonCorrTorch,
-    'BCEWithLogits': nn.BCEWithLogitsLoss,
-    'AveragePrecisionWithLogits': AveragePrecisionWithLogits
+    "Huber": nn.SmoothL1Loss,
+    "MAE": nn.L1Loss,
+    "MSE": nn.MSELoss,
+    "RSquared": RSquared,
+    "PearsonCorr": PearsonCorr,
+    "PearsonCorrTorch": PearsonCorrTorch,
+    "BCEWithLogits": nn.BCEWithLogitsLoss,
+    "AveragePrecisionWithLogits": AveragePrecisionWithLogits,
 }
-
-pheno_to_id = {'Apolipoprotein_A': 1, 'Apolipoprotein_B':2, 'Calcium':3,
-              'Cholesterol':4, 'HDL_cholesterol':5, 'IGF_1':6, 'LDL_direct':7,
-              'Lymphocyte_percentage':8, 'Mean_corpuscular_volume':9,
-              'Mean_platelet_thrombocyte_volume':10, 'Mean_reticulocyte_volume':11,
-              'Neutrophill_count':12, 'Platelet_count':13, 'Platelet_crit':14,
-              'Platelet_distribution_width':15, 'Red_blood_cell_erythrocyte_count':16, 
-              'SHBG':17, 'Standing_height':18, 'Total_bilirubin':19, 'Triglycerides':20,
-              'Urate':21}
-
-id_to_pheno = {v:k for k, v in pheno_to_id.items()}
 
 
 def get_hparam(module: pl.LightningModule, param: str, default: Any):
@@ -52,55 +44,55 @@ def get_hparam(module: pl.LightningModule, param: str, default: Any):
 
 class BaseModel(pl.LightningModule):
     def __init__(
-            self,
-            config: dict,
-            n_annotations: Dict[str, int],
-            n_covariates: Dict[str, int],
-            n_genes: Dict[str, int],
-            # checkpoint_file: str,
-            phenotypes: List[str],
-            stage: str = 'train',
-            **kwargs):
+        self,
+        config: dict,
+        n_annotations: Dict[str, int],
+        n_covariates: Dict[str, int],
+        n_genes: Dict[str, int],
+        phenotypes: List[str],
+        stage: str = "train",
+        **kwargs,
+    ):
         super().__init__()
-
-        # self.checkpoint_file = Path(checkpoint_file)
-
         self.save_hyperparameters(config)
-        self.save_hyperparameters('n_annotations', 'n_covariates', 'n_genes',
-                                  'phenotypes', 'stage')
         self.save_hyperparameters(kwargs)
+        self.save_hyperparameters(
+            "n_annotations", "n_covariates", "n_genes", "phenotypes", "stage"
+        )
 
         self.metric_fns = {
-            name: METRICS[name]()
-            for name in self.hparams.metrics['all']
+            name: METRICS[name]() for name in self.hparams.metrics["all"]
         }
 
-        self.objective_mode = self.hparams.metrics.get('objective_mode', 'max')
-        if self.objective_mode == 'max':
-            self.best_objective = float('-inf')
-        elif self.objective_mode == 'min':
-            self.best_objective = float('inf')
+        self.objective_mode = self.hparams.metrics.get("objective_mode", "min")
+        if self.objective_mode == "max":
+            self.best_objective = float("-inf")
+            self.objective_operation = max
+        elif self.objective_mode == "min":
+            self.best_objective = float("inf")
+            self.objective_operation = min
         else:
-            raise ValueError('Unknown objective_mode configuration parameter')
+            raise ValueError("Unknown objective_mode configuration parameter")
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        optimizer_config = self.hparams['optimizer']
-        optimizer_class = getattr(torch.optim, optimizer_config['type'])
-        optimizer = optimizer_class(self.parameters(),
-                                    **optimizer_config.get('config', {}))
+        optimizer_config = self.hparams["optimizer"]
+        optimizer_class = getattr(torch.optim, optimizer_config["type"])
+        optimizer = optimizer_class(
+            self.parameters(), **optimizer_config.get("config", {})
+        )
 
-        lrsched_config = optimizer_config.get('lr_scheduler', None)
+        lrsched_config = optimizer_config.get("lr_scheduler", None)
         if lrsched_config is not None:
-            lr_scheduler_class = getattr(torch.optim.lr_scheduler,
-                                         lrsched_config['type'])
-            lr_scheduler = lr_scheduler_class(optimizer,
-                                              **lrsched_config['config'])
+            lr_scheduler_class = getattr(
+                torch.optim.lr_scheduler, lrsched_config["type"]
+            )
+            lr_scheduler = lr_scheduler_class(optimizer, **lrsched_config["config"])
 
-            if lrsched_config['type'] == 'ReduceLROnPlateau':
+            if lrsched_config["type"] == "ReduceLROnPlateau":
                 return {
-                    'optimizer': optimizer,
-                    'lr_scheduler': lr_scheduler,
-                    'monitor': lrsched_config['monitor']
+                    "optimizer": optimizer,
+                    "lr_scheduler": lr_scheduler,
+                    "monitor": lrsched_config["monitor"],
                 }
             else:
                 return [optimizer], [lr_scheduler]
@@ -108,111 +100,85 @@ class BaseModel(pl.LightningModule):
             return optimizer
 
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
-        y_pred_by_pheno = self(
-            batch)  # Dict[pheno: str, y_pred: 1-d torch.Tensor]
-
-        results = {}
+        y_pred_by_pheno = self(batch)
+        results = dict()
         for name, fn in self.metric_fns.items():
             results[name] = torch.mean(
-                torch.stack([
-                    fn(y_pred, batch[pheno]["y"])
-                    for pheno, y_pred in y_pred_by_pheno.items()
-                ]))
-            self.log(f'{self.hparams.stage}_{name}', results[name])
+                torch.stack(
+                    [
+                        fn(y_pred, batch[pheno]["y"])
+                        for pheno, y_pred in y_pred_by_pheno.items()
+                    ]
+                )
+            )
+            self.log(f"{self.hparams.stage}_{name}", results[name])
 
-        loss = results[self.hparams.metrics['loss']]
+        loss = results[self.hparams.metrics["loss"]]
         if torch.any(torch.isnan(loss)):
-            raise RuntimeError('NaNs found in training loss')
-
+            raise RuntimeError("NaNs found in training loss")
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int):
-        y_by_pheno = {
-            pheno: pheno_batch['y']
-            for pheno, pheno_batch in batch.items()
-        }
-        y_pred_by_pheno = self(batch)
-        return {'y_pred_by_pheno': y_pred_by_pheno, 'y_by_pheno': y_by_pheno}
+        y_by_pheno = {pheno: pheno_batch["y"] for pheno, pheno_batch in batch.items()}
+        return {"y_pred_by_pheno": self(batch), "y_by_pheno": y_by_pheno}
 
     def validation_epoch_end(
-        self,
-        prediction_y: List[  # validation batch
-            Dict[str,  # y_pred_by_pheno or y_by_pheno
-                 Dict[str,  # phenotype
-                      torch.Tensor]]]):
+        self, prediction_y: List[Dict[str, Dict[str, torch.Tensor]]]
+    ):
         y_pred_by_pheno = dict()
         y_by_pheno = dict()
         for result in prediction_y:
             pred = result["y_pred_by_pheno"]
             for pheno, ys in pred.items():
-                y_pred_by_pheno[pheno] = torch.cat([
-                    y_pred_by_pheno.get(pheno,
-                                        torch.tensor([], device=self.device)),
-                    ys
-                ])
+                y_pred_by_pheno[pheno] = torch.cat(
+                    [
+                        y_pred_by_pheno.get(
+                            pheno, torch.tensor([], device=self.device)
+                        ),
+                        ys,
+                    ]
+                )
 
             target = result["y_by_pheno"]
             for pheno, ys in target.items():
-                y_by_pheno[pheno] = torch.cat([
-                    y_by_pheno.get(pheno, torch.tensor([],
-                                                       device=self.device)), ys
-                ])
+                y_by_pheno[pheno] = torch.cat(
+                    [y_by_pheno.get(pheno, torch.tensor([], device=self.device)), ys]
+                )
 
-        results = {}
+        results = dict()
         for name, fn in self.metric_fns.items():
             results[name] = torch.mean(
-                torch.stack([
-                    fn(y_pred, y_by_pheno[pheno])
-                    for pheno, y_pred in y_pred_by_pheno.items()
-                ]))
-            self.log(f'val_{name}', results[name])
+                torch.stack(
+                    [
+                        fn(y_pred, y_by_pheno[pheno])
+                        for pheno, y_pred in y_pred_by_pheno.items()
+                    ]
+                )
+            )
+            self.log(f"val_{name}", results[name])
 
-        if self.objective_mode == 'max':
-            self.best_objective = max(
-                self.best_objective,
-                results[self.hparams.metrics['objective']].item())
-        else:
-            self.best_objective = min(
-                self.best_objective,
-                results[self.hparams.metrics['objective']].item())
+        self.best_objective = self.objective_operation(
+            self.best_objective, results[self.hparams.metrics["objective"]].item()
+        )
 
-    # TODO: Rewrite as for validation_step
     def test_step(self, batch: dict, batch_idx: int):
-        y = batch['y']
-        y_pred = self(batch)
-        return {'y_pred': y_pred, 'y': y}
+        return {"y_pred": self(batch), "y": batch["y"]}
 
-    # TODO: Rewrite as for validation_epoch_end
     def test_epoch_end(self, prediction_y: List[Dict[str, torch.Tensor]]):
-        y_pred = torch.cat([p['y_pred'] for p in prediction_y])
-        y = torch.cat([p['y'] for p in prediction_y])
+        y_pred = torch.cat([p["y_pred"] for p in prediction_y])
+        y = torch.cat([p["y"] for p in prediction_y])
 
         results = {}
         for name, fn in self.metric_fns.items():
             results[name] = fn(y_pred, y)
-            self.log(f'val_{name}', results[name])
+            self.log(f"val_{name}", results[name])
 
-        self.best_objective = max(
-            self.best_objective,
-            results[self.hparams.metrics['objective']].item())
+        self.best_objective = self.objective_operation(
+            self.best_objective, results[self.hparams.metrics["objective"]].item()
+        )
 
     def configure_callbacks(self):
-        callbacks = []
-
-        # monitor = (f'{self.hparams.stage}_{self.hparams.metrics["loss"]}')
-        # callbacks.append(
-        #     EarlyStopping(monitor=monitor,
-        #                   mode='min',
-        #                   min_delta=1e-7,
-        #                   patience=5))
-        # if self.hparams.stage == 'train':
-        #     callbacks.append(
-        #         ModelCheckpoint(dirpath=self.checkpoint_file.parent,
-        #                         filename=self.checkpoint_file.name,
-        #                         monitor=('train_' +
-        #                                  self.hparams.metrics['objective'])))
-        callbacks.append(ModelSummary())
-        return callbacks
+        return [ModelSummary()]
 
 
 class DeepSetAgg(pl.LightningModule):
@@ -232,164 +198,136 @@ class DeepSetAgg(pl.LightningModule):
     ):
         super().__init__()
 
-        self.activation = getattr(nn, activation)()
         self.output_dim = output_dim
-
+        self.activation = getattr(nn, activation)()
         if dropout is not None:
             self.dropout = nn.Dropout(p=dropout)
+        self.use_sigmoid = use_sigmoid
+        self.reverse = reverse
 
-        phi = []
         input_dim = n_annotations
+        phi = []
         for l in range(phi_layers):
             output_dim = phi_hidden_dim
-            phi.append((f'phi_linear_{l}', nn.Linear(input_dim, output_dim)))
+            phi.append((f"phi_linear_{l}", nn.Linear(input_dim, output_dim)))
             if dropout is not None:
-                phi.append((f'phi_dropout_{l}', self.dropout))
-                
-            # HAKIME. Shap does not like when a layer is reused. 
-            #phi.append((f'phi_activation_{l}', self.activation))
-            phi.append((f'phi_activation_{l}', nn.LeakyReLU(negative_slope=0.01)))
+                phi.append((f"phi_dropout_{l}", self.dropout))
+            phi.append((f"phi_activation_{l}", self.activation))
             input_dim = output_dim
-
         self.phi = nn.Sequential(OrderedDict(phi))
 
-        if pool not in ('sum', 'max'):
-            raise ValueError(f'Unknown pooling operation {pool}')
+        if pool not in ("sum", "max"):
+            raise ValueError(f"Unknown pooling operation {pool}")
         self.pool = pool
 
         rho = []
         for l in range(rho_layers - 1):
             output_dim = rho_hidden_dim
-            rho.append((f'rho_linear_{l}', nn.Linear(input_dim, output_dim)))
+            rho.append((f"rho_linear_{l}", nn.Linear(input_dim, output_dim)))
             if dropout is not None:
-                rho.append((f'rho_dropout_{l}', self.dropout))
-            
-            # HAKIME. Shap does not like when a layer is reused. 
-            #rho.append((f'rho_activation_{l}', self.activation))
+                rho.append((f"rho_dropout_{l}", self.dropout))
+            # UPDATED TO BE ABLE RUN WITH SHAP.
+            # Shap does not like when a layer is reused. 
+            #rho.append((f"rho_activation_{l}", self.activation))
             rho.append((f'rho_activation_{l}', nn.LeakyReLU(negative_slope=0.01)))
             input_dim = output_dim
-
-        rho.append((f'rho_linear_{rho_layers - 1}',
-                    nn.Linear(input_dim, self.output_dim)))
-
+        rho.append(
+            (f"rho_linear_{rho_layers - 1}", nn.Linear(input_dim, self.output_dim))
+        )
         self.rho = nn.Sequential(OrderedDict(rho))
-
-        self.use_sigmoid = use_sigmoid
-        self.reverse = reverse
 
     def set_reverse(self, reverse: bool = True):
         self.reverse = reverse
 
     def forward(self, x):
-        # TODO: is this okay for the padding?
-        x = self.phi(x.permute(
-            (0, 1, 3, 2)))  # x.shape = samples x genes x variants x phi_latent
-        if self.pool == 'sum':
+        x = self.phi(x.permute((0, 1, 3, 2)))
+        # x.shape = samples x genes x variants x phi_latent
+        if self.pool == "sum":
             x = torch.sum(x, dim=2)
         else:
             x = torch.max(x, dim=2).values
         # Now x.shape = samples x genes x phi_latent
-        x = self.rho(x)  # x.shape = samples x genes x rho_latent
-
+        x = self.rho(x)
+        # x.shape = samples x genes x rho_latent
         if self.reverse:
             x = -x
-
         if self.use_sigmoid:
             x = torch.sigmoid(x)
-
         return x
 
 
-# TODO: Implement batchnorm or other additional regularization
 class DeepSet(BaseModel):
     def __init__(
-            self,
-            config: dict,
-            pheno:str, ## added this
-            n_annotations: Dict[str, int],
-            n_covariates: Dict[str, int],
-            n_genes: Dict[str, int],
-            # checkpoint_file: str,
-            phenotypes: List[str],
-            agg_model: Optional[nn.Module] = None,
-            use_sigmoid: bool = False,
-            reverse: bool = False,
-            **kwargs):
+        self,
+        config: dict,
+        pheno:str, ## NEW ARGUMENT FOR SHAP COMPABILITY
+        n_annotations: Dict[str, int],
+        n_covariates: Dict[str, int],
+        n_genes: Dict[str, int],
+        phenotypes: List[str],
+        agg_model: Optional[nn.Module] = None,
+        use_sigmoid: bool = False,
+        reverse: bool = False,
+        **kwargs,
+    ):
         super().__init__(
-            config,
-            n_annotations,
-            n_covariates,
-            n_genes,
-            # checkpoint_file,
-            # output_dim=1,
-            phenotypes,
-            **kwargs)
+            config, n_annotations, n_covariates, n_genes, phenotypes, **kwargs
+        )
 
-        logger.info('Initializing DeepSet model with parameters:')
+        logger.info("Initializing DeepSet model with parameters:")
         pprint(self.hparams)
-
-        n_annotations = self.hparams.n_annotations
-        phi_layers = self.hparams.phi_layers
-        phi_hidden_dim = self.hparams.phi_hidden_dim
-        rho_layers = self.hparams.rho_layers
-        rho_hidden_dim = self.hparams.rho_hidden_dim
-        activation = get_hparam(self, 'activation', 'LeakyReLU')
-        pool = get_hparam(self, 'pool', 'sum')
-        dropout = get_hparam(self, 'dropout', None)
+        
+        self.pheno  = pheno
+        activation = get_hparam(self, "activation", "LeakyReLU")
+        pool = get_hparam(self, "pool", "sum")
+        dropout = get_hparam(self, "dropout", None)
 
         if agg_model is not None:
             self.agg_model = agg_model
         else:
             self.agg_model = DeepSetAgg(
-                n_annotations,
-                phi_layers,
-                phi_hidden_dim,
-                rho_layers,
-                rho_hidden_dim,
-                # 1,
+                self.hparams.n_annotations,
+                self.hparams.phi_layers,
+                self.hparams.phi_hidden_dim,
+                self.hparams.rho_layers,
+                self.hparams.rho_hidden_dim,
                 activation,
                 pool,
                 dropout=dropout,
                 use_sigmoid=use_sigmoid,
-                reverse=reverse)
+                reverse=reverse,
+            )
+        self.agg_model.train(False if self.hparams.stage == "val" else True)
 
-        if self.hparams.stage == 'val':
-            self.agg_model.eval()
-            for param in self.agg_model.parameters():
-                param.requires_grad = False
-        else:
-            self.agg_model.train()
-            for param in self.agg_model.parameters():
-                param.requires_grad = True
-                
-        #self.pheno = None
-        self.pheno  = pheno
-
-        self.gene_pheno = nn.ModuleDict({
-            pheno:
-            nn.Linear(self.hparams.n_covariates + self.hparams.n_genes[pheno],
-                      1)
-            for pheno in self.hparams.phenotypes
-        })
-
-    # def set_reverse(self, reverse: bool = True):
-    #     self.agg_model.set_reverse(reverse)
-
+        self.gene_pheno = nn.ModuleDict(
+            {
+                pheno: nn.Linear(
+                    self.hparams.n_covariates + self.hparams.n_genes[pheno], 1
+                )
+                for pheno in self.hparams.phenotypes
+            }
+        )
+    # FORWARD ORIGINAL. Runs mutagenesis. 
+    # Commented out to run SHAP.
+    '''
+    def forward(self, batch):
+        result = dict()
+        for pheno, this_batch in batch.items():
+            x = this_batch["rare_variant_annotations"]
+            # x.shape = samples x genes x annotations x variants
+            x = self.agg_model(x).squeeze(dim=2)
+            # x.shape = samples x genes
+            x = torch.cat((this_batch["covariates"], x), dim=1)
+            # x.shape = samples x (genes + covariates)
+            result[pheno] = self.gene_pheno[pheno](x).squeeze(dim=1)
+            # result[pheno].shape = samples
+        return result
+    '''
     
-    # FORWARD ORIGINAL. Runs mutagenesis. Hakime
-    #def forward(self, batch):
-    #    result = dict()
-    #    for pheno, this_batch in batch.items():
-    #        # samples x genes x annotations x variants
-    #        x = this_batch['rare_variant_annotations']
-    #        x = self.agg_model(x).squeeze(dim=2)  # samples x genes
-    #        x = torch.cat((this_batch['covariates'], x), dim=1)
-    #        result[pheno] = self.gene_pheno[pheno](x).squeeze(dim=1)  # samples
-    #
-    #    return result
     
-    # FORWARD TO RUN SHAP. Hakime.  
-    def forward(self, rare_variant_annotations, x_covariates): #, pheno_codes):
+    # FORWARD TO RUN SHAP.
+    # Comment out below & un-comment original Forward above to run regularly 
+    def forward(self, rare_variant_annotations, x_covariates): 
         x = rare_variant_annotations
         x = self.agg_model(x).squeeze(dim=2)  # samples x genes
         x = torch.cat((x_covariates, x), dim=1)
@@ -409,10 +347,10 @@ class LinearAgg(pl.LightningModule):
         self.linear = nn.Linear(n_annotations, self.output_dim)
 
     def forward(self, x):
-        # TODO: is this okay for the padding?
-        x = self.linear(x.permute(
-            (0, 1, 3, 2)))  # x.shape = samples x genes x variants x output_dim
-        if self.pool == 'sum':
+        x = self.linear(
+            x.permute((0, 1, 3, 2))
+        )  # x.shape = samples x genes x variants x output_dim
+        if self.pool == "sum":
             x = torch.sum(x, dim=2)
         else:
             x = torch.max(x, dim=2).values
@@ -420,38 +358,30 @@ class LinearAgg(pl.LightningModule):
         return x
 
 
-# TODO: Implement batchnorm or other additional regularization
 class TwoLayer(BaseModel):
     def __init__(
-            self,
-            config: dict,
-            n_annotations: int,
-            n_covariates: int,
-            n_genes: int,
-            # checkpoint_file: str,
-            agg_model: Optional[nn.Module] = None,
-            **kwargs):
-        super().__init__(
-            config,
-            n_annotations,
-            n_covariates,
-            n_genes,
-            # checkpoint_file,
-            # output_dim=1,
-            **kwargs)
+        self,
+        config: dict,
+        n_annotations: int,
+        n_covariates: int,
+        n_genes: int,
+        agg_model: Optional[nn.Module] = None,
+        **kwargs,
+    ):
+        super().__init__(config, n_annotations, n_covariates, n_genes, **kwargs)
 
-        logger.info('Initializing TwoLayer model with parameters:')
+        logger.info("Initializing TwoLayer model with parameters:")
         pprint(self.hparams)
 
         n_annotations = self.hparams.n_annotations
-        pool = get_hparam(self, 'pool', 'sum')
+        pool = get_hparam(self, "pool", "sum")
 
         if agg_model is not None:
             self.agg_model = agg_model
         else:
             self.agg_model = LinearAgg(n_annotations, pool)
 
-        if self.hparams.stage == 'val':
+        if self.hparams.stage == "val":
             self.agg_model.eval()
             for param in self.agg_model.parameters():
                 param.requires_grad = False
@@ -460,13 +390,12 @@ class TwoLayer(BaseModel):
             for param in self.agg_model.parameters():
                 param.requires_grad = True
 
-        self.gene_pheno = nn.Linear(
-            self.hparams.n_covariates + self.hparams.n_genes, 1)
+        self.gene_pheno = nn.Linear(self.hparams.n_covariates + self.hparams.n_genes, 1)
 
     def forward(self, batch):
         # samples x genes x annotations x variants
-        x = batch['rare_variant_annotations']
+        x = batch["rare_variant_annotations"]
         x = self.agg_model(x).squeeze(dim=2)  # samples x genes
-        x = torch.cat((batch['covariates'], x), dim=1)
+        x = torch.cat((batch["covariates"], x), dim=1)
         x = self.gene_pheno(x).squeeze(dim=1)  # samples
         return x
