@@ -354,10 +354,6 @@ Supp. Fig. 3.3
 ```{r}
 results_paper <- results %>%
   filter(Method == "DeepRVAT", `Discovery type` == "New DeepRVAT discovery")
-significant_paper <- significant %>%
-  filter(Method == "DeepRVAT", `Discovery type` == "New DeepRVAT discovery") %>%
-  distinct(Trait, Method, gene, .keep_all = TRUE) %>%
-  mutate(Method = "DeepRVAT")
 
 results_dir <- "permutation_analysis"
 
@@ -371,62 +367,37 @@ results <- bind_rows(results_list) %>%
   filter(Method == "DeepRVAT", `Discovery type` == "New DeepRVAT discovery") %>%
   mutate(Method = "DeepRVAT permuted")
 results
-
-significant <- results %>%
-  filter(significant) %>%
-  distinct(Trait, Method, gene, .keep_all = TRUE)
-significant
-
-name_paper <-paste0("True phenotypes (", nrow(significant_paper), " discoveries)")
-name_permuted <- paste0("Permuted phenotypes (", nrow(significant), " discoveries)")
-
-counts <- bind_rows(significant, significant_paper) %>%
-#   bind_rows(
-#   significant %>% mutate(is_single_trait = "True"),
-#   significant %>% mutate(Trait = "All traits", is_single_trait = "False")
-# ) %>%
-  mutate(Method = case_match(
-    Method,
-    "DeepRVAT" ~ name_paper,
-    "DeepRVAT permuted" ~ name_permuted
-  )) %>%
-#  mutate(
-#    Method = factor(Method, levels = rev(Method))
-#    ) %>%
-  count(Method) %>%
-  mutate(Trait = "All traits")
-counts
 ```
 
 ```{r}
-colors <- c("#3182bd", '#7A2961')
+# colors <- c("#3182bd", '#7A2961')
 
-discovery_plot_alltraits <- ggplot(
-    counts,
-    aes(
-      x=Trait,
-      y=n,
-      fill=Method,
-    )
-) + 
-geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
-ylab("Significant gene-trait associations\n(new DeepRVAT discoveries)") +
-theme_classic() +
-base_theme + 
-theme(
-    axis.text.y=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
-    axis.text.x=element_blank(),
-    axis.ticks.x = element_blank(),
-    axis.title.x=element_blank(),
-    legend.key.size=unit(0.5, "line"),
-    legend.position = "bottom",
-    legend.title=element_blank()
-) +
-  scale_fill_manual(values = colors) +
-  # coord_flip() +
-  guides(fill = guide_legend(nrow = 2, byrow = TRUE))
+#discovery_plot_alltraits <- ggplot(
+#    counts,
+#    aes(
+#      x=Trait,
+#      y=n,
+#      fill=Method,
+#    )
+#) + 
+#geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+#ylab("Significant gene-trait associations\n(new DeepRVAT discoveries)") +
+#theme_classic() +
+#base_theme + 
+#theme(
+#    axis.text.y=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
+#    axis.text.x=element_blank(),
+#    axis.ticks.x = element_blank(),
+#    axis.title.x=element_blank(),
+#    legend.key.size=unit(0.5, "line"),
+#    legend.position = "bottom",
+#    legend.title=element_blank()
+#) +
+#  scale_fill_manual(values = colors) +
+#  # coord_flip() +
+#  guides(fill = guide_legend(nrow = 2, byrow = TRUE))
 
-discovery_plot_alltraits
+#discovery_plot_alltraits
 ```
 
 ```{r}
@@ -437,16 +408,30 @@ prep_for_qqplot <- function(pval_df, group_name) {
       mutate(
         neg_log10_pval_observed = -log10(pval),
         neg_log10_pval_expected = -log10((1:nrow(pval_df)) / nrow(pval_df))
-      )
+      ) %>%
+      mutate(clipped = neg_log10_pval_observed > 20) %>%
+      mutate(neg_log10_pval_observed = pmin(neg_log10_pval_observed, 20))
   )
 }
 
-pvals_for_qqplot <- bind_rows(results, results_paper) %>%
+all_pvals <- read_parquet("all_pvals.parquet") %>% 
+  filter(
+    Trait %in% (results %>% distinct(Trait))$Trait,
+    #trait_group == "Quantitative",
+    Method %in% c("Burden/SKAT combined", "Monti et al.", "STAAR")
+    )
+
+pvals_for_qqplot <- bind_rows(
+  results, 
+  results_paper, 
+  all_pvals
+  ) %>%
   mutate(
     Method = case_match(
       Method,
-      "DeepRVAT" ~ paste0("True phenotypes (", nrow(significant_paper), " discoveries)"),
-      "DeepRVAT permuted" ~ paste0("Permuted phenotypes (", nrow(significant), " discoveries)")
+      "DeepRVAT" ~ paste0("DeepRVAT - True phenotypes"),
+      "DeepRVAT permuted" ~ paste0("DeepRVAT - Permuted phenotypes"),
+      .default = Method
     )
   ) %>%
   group_by(Method) %>%
@@ -458,13 +443,24 @@ compute_lambda <- function(pvals) {
   return(format(round(lambda, 4), nsmall = 4))
 }
 
+lambda_baseline <- compute_lambda(filter(pvals_for_qqplot, Method == "Burden/SKAT combined")$pval)
+lambda_monti <- compute_lambda(filter(pvals_for_qqplot, Method == "Monti et al.")$pval)
+lambda_staar <- compute_lambda(filter(pvals_for_qqplot, Method == "STAAR")$pval)
 lambda_true <- compute_lambda(filter(pvals_for_qqplot, grepl("True", Method))$pval)
 lambda_perm <- compute_lambda(filter(pvals_for_qqplot, grepl("Permuted", Method))$pval)
 ```
 
 ```{r}
+colors <- c('#08519c', "aquamarine4", '#E6AB02', '#7A2961', 'darkred')
+
+pvals_for_qqplot <- pvals_for_qqplot %>%
+  mutate(Method = factor(Method, levels = c("Burden/SKAT combined", "Monti et al.", "STAAR", "DeepRVAT - True phenotypes", "DeepRVAT - Permuted phenotypes")))
+
+lambda_max <- 18
+lambda_offset <- 2
+
 qqplot <- ggplot(
-  pvals_for_qqplot, #%>%
+  pvals_for_qqplot, 
 #    mutate(
 #      Method = case_match(
 #        Method,
@@ -472,61 +468,100 @@ qqplot <- ggplot(
 #        "permutation_analysis" ~ "Permuted"
 #      )
 #    ), 
-  aes(x = neg_log10_pval_expected, y = neg_log10_pval_observed, color = Method)
+  aes(x = neg_log10_pval_expected, y = neg_log10_pval_observed, color = Method, shape = clipped)
   ) +
   geom_abline(intercept=0, slope=1, color='lightgray', linewidth=0.5) +
   geom_point(alpha = 0.5, size = 0.3) + 
-  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_true, "$")), x = 1.5, y = 30, color = colors[2]) +
-  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_perm, "$")), x = 1.5, y = 25, color = colors[1]) +
+  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_baseline, "$")), x = 1.5, y = lambda_max, color = colors[1]) +
+  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_monti, "$")), x = 1.5, y = lambda_max - lambda_offset, color = colors[2]) +
+  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_staar, "$")), x = 1.5, y = lambda_max - 2 * lambda_offset, color = colors[3]) +
+  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_true, "$")), x = 1.5, y = lambda_max - 3 * lambda_offset, color = colors[4]) +
+  annotate(geom = "text", label = TeX(paste0(r"($\lambda = )", lambda_perm, "$")), x = 1.5, y = lambda_max - 4 * lambda_offset, color = colors[5]) +
   scale_x_continuous(name=expression(Expected~~-log[10](italic(p)))) +
   scale_y_continuous(name=expression(Observed~~-log[10](italic(p)))) + 
   scale_color_manual(values = colors) +
   theme_classic() +
   base_theme +
   theme(
-    legend.position = "none",
-    legend.key.size = unit(8, "points")
+    legend.position = "bottom",
+    legend.key.size = unit(12, "points")
   ) +
   guides(color = guide_legend(
     title="Trait values"),
     title.position = "top",
-    override.aes = list(size=10))
-qqplot
+    override.aes = list(size=12),
+    shape = "none")
+#qqplot
 ```
 
 ```{r}
-size_b <- list(width = 10.1, height = 10.1)
-size_null <- list(width = 0.4, height = 0.5)
-size_a <- list(width = 5, height = size_b$height)
+binary_counts_with_qc <- readRDS("binary_counts_with_qc.Rds")
+
+scatter_theme = theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust =1 ),
+        strip.background = element_rect(fill = "white", colour = "black", 
+    linewidth = rel(2)),
+    panel.grid = element_line(colour = "grey92"), 
+            panel.grid.minor = element_line(linewidth = rel(0.5))
+  ) 
+p_cases_vs_discoveries = ggplot(binary_counts_with_qc %>% 
+         filter(n_cases < 50000) %>%
+         drop_na(), aes(x = n_cases , y = n)) +
+  geom_point() +
+  facet_wrap(vars(Method), ncol = 4) +
+  scale_x_log10() +
+  theme_classic() +
+  scatter_theme +
+  labs(y = 'Significant gene-trait associations', x = 'Number of cases')
+p_cases_vs_discoveries
+p_cases_vs_lambda = ggplot(binary_counts_with_qc %>% drop_na()  %>% filter(n_cases < 50000), aes(x = n_cases , y = lambda_gc)) +
+  geom_point() +
+  facet_wrap(vars(Method), ncol = 4) +
+  theme_classic()+
+  scatter_theme +
+  scale_x_log10() +
+  labs(y = 'Lambda GC', x = 'Number of cases')
+p_cases_vs_lambda
+```
+
+```{r}
+pad <- function(plot, width, height, left = 0, top = 0, right = 0, bottom = 0) {
+  return(
+    ggarrange(
+      NULL,
+      ggarrange(
+        NULL, plot, NULL,
+        widths = c(left, width, right),
+        ncol = 3,
+        nrow = 1
+      ),
+      NULL,
+      heights = c(top, height, bottom),
+      ncol = 1,
+      nrow = 3
+    )
+  )
+}
 
 fig3.3 <- ggarrange(
-  NULL, 
-  discovery_plot_alltraits,
-  ggarrange(
-    qqplot,
-    NULL,
-    widths = c(size_b$width, size_b$width),
-    heights = c(size_b$height - size_null$height, size_null$height),
-    nrow = 2,
-    ncol = 1
-  ),
-  labels = c("a", "", "b"),
-  widths = c(size_null$width, size_a$width, size_b$width),
-  nrow = 1,
-  ncol = 3
+  pad(qqplot, 7, 7, left = 3.75, right = 3.75),
+  pad(p_cases_vs_discoveries, 15.5, 6, left = 0.5),
+  pad(p_cases_vs_lambda, 15.5, 6, left = 0.5),
+  labels = c("a", "b", "c"),
+  heights = c(7, 6, 6),
+  nrow = 3,
+  ncol = 1
 )
 fig3.3
 
 ggsave(
   filename = "fig3-3.png",
-  width = size_null$width + size_a$width + size_b$width,
-  height = size_a$height, 
+  width = 15.5,
+  height = 18, 
   units = "cm",
   dpi = 600
   )
 ```
-
-
 
 Supp. Fig. 3.4
 
