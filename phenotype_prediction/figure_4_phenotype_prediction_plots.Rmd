@@ -1,5 +1,5 @@
 ---
-title: "phenotype_prediction_plots.Rmd"
+title: "individual_prediction_plots.Rmd"
 author: "Eva"
 date: "2023-06-20"
 output: html_document
@@ -20,68 +20,95 @@ library(purrr)
 library(latex2exp)
 
 options(dplyr.summarise.inform = FALSE)
-
+top_n = 1 # if there are no significant hits for a trait/gene-list/cv-split combination, the top-n genes are used. For combinations with significant associations, all sign. genes are used, not just the top_n ones
 ```
 
 ```{r}
-experiment_directory = 'PATH_TO_EXPERIMENT" # where deeprvat-analysis/phenotype_prediction/phenotype_prediction_pipeline/phenotype_prediction_pipeline.snakefile has been run' #Has to be put in!
-
-plot_out_path = "./plots"
+phenotypes = c(
+  'Apolipoprotein_A',
+  'Apolipoprotein_B',
+  'Calcium',
+  'Cholesterol',
+  'HDL_cholesterol',
+  'IGF_1',
+    'LDL_direct',
+  'SHBG',
+  'Total_bilirubin',
+  'Triglycerides',
+  'Urate',
+  'Standing_height',
+  'Lymphocyte_percentage',
+  'Mean_platelet_thrombocyte_volume',
+  'Mean_corpuscular_volume',
+  'Mean_reticulocyte_volume',
+  'Neutrophill_count',
+  'Platelet_count',
+  'Platelet_crit',
+  'Platelet_distribution_width',
+  'Red_blood_cell_erythrocyte_count',
+  'Body_mass_index_BMI',
+  'Glucose',
+  'Vitamin_D',
+  'Albumin',
+  'Total_protein',
+  'Cystatin_C',
+  'Gamma_glutamyltransferase',
+  'Alkaline_phosphatase',
+  'Creatinine',
+  'Whole_body_fat_free_mass',
+  'Forced_expiratory_volume_in_1_second_FEV1',
+  'Glycated_haemoglobin_HbA1c'
+  )
+length(phenotypes)
 ```
 
 ```{r}
+font_size <- 10
+title_font_size = 12
+font_family <- "Helvetica"
+plot_font <- element_text(size = font_size, family = font_family)
 
-phenotypes = c("Apolipoprotein_A", 
-               "Apolipoprotein_B", 
-               "Calcium", 
-               "Cholesterol",
-               "HDL_cholesterol",
-               "IGF_1" ,
-               "LDL_direct",
-               "Lymphocyte_percentage",
-               "Mean_corpuscular_volume",
-               "Mean_platelet_thrombocyte_volume",
-               "Mean_reticulocyte_volume",
-               "Neutrophill_count",
-               "Platelet_count",
-               "Platelet_crit",
-               "Platelet_distribution_width",
-               "Red_blood_cell_erythrocyte_count",
-               "SHBG",
-               "Standing_height",
-               "Triglycerides",
-               "Total_bilirubin",
-               "Urate"
+base_theme <- theme(
+    text = element_text(size = font_size, family = font_family),
+    axis.text = element_text(size = font_size, family = font_family),
+    axis.title = element_text(size = font_size + 2, family = font_family),
+
+    strip.text.x = element_text(size = font_size + 2, family = font_family),
+    strip.text.y = element_text(size = font_size + 2, family = font_family),
+    
+    legend.title=element_blank(),
+    panel.background = element_rect(fill='transparent'), #transparent panel bg
+    plot.background = element_rect(fill='transparent', color=NA, linewidth = 0), #transparent plot bg
+    legend.background = element_rect(fill='transparent'), #transparent legend bg
+    legend.box.background = element_rect(fill='transparent', color=NA), #transparent legend panel
 )
+base_theme_wo_strip <- theme(
+    text = element_text(size = font_size, family = font_family),
+    axis.text = element_text(size = font_size, family = font_family),
+    axis.title = element_text(size = font_size + 2, family = font_family),
 
-phenotype_renamer = c(
-    'Mean_platelet_thrombocyte_volume' = 'MPTVS',
-    'IGF_1' = 'IGF-1',
-    'Red_blood_cell_erythrocyte_count' = 'Erythrocyte count'
+    strip.text.x = element_blank(),
+    strip.text.y = element_blank(),
+    legend.title=element_blank(),
+    panel.background = element_rect(fill='transparent'), #transparent panel bg
+    plot.background = element_rect(fill='transparent', color=NA, linewidth = 0), #transparent plot bg
+    legend.background = element_rect(fill='transparent'), #transparent legend bg
+    legend.box.background = element_rect(fill='transparent', color=NA), #transparent legend panel
 )
+```
 
-phenotype_dict = c()
-for (p in phenotypes){
-  if (! p %in% names(phenotype_renamer)){
-    p_name = str_replace_all(p, '_', ' ')
-  }
-  else{
-    p_name = phenotype_renamer[[p]]
-  }
-  phenotype_dict[[p]] = p_name
-}
-
+```{r}
+plot_out_path = "./"
+exp_dir = 'phenotype_prediction' #directory where deeprvat-analysis/phenotype_prediction/phenotype_prediction_pipeline/phenotype_prediction_pipeline.snakefile has bee run (together with deeprvat-analysis/phenotype_prediction/cv_deeprvat_training/run_deeprvat_cv.snakefile beforehand)
 paper_plots = list()
 ```
 
 
 
 ```{r}
-getwd()
-linear_model_res_path = file.path(experiment_directory,'/phenotype_prediction/models/linear_models/')
+linear_model_res_path = file.path(exp_dir, 'models/linear_models/', paste('top', top_n, sep = '_'))
 fdr = 0.05
 phenotype_suffix = 'qt'
-phenotypes <- phenotypes[file.exists(paste0(linear_model_res_path, '/', phenotypes, '/', phenotype_suffix, '_fdr-', fdr, '.Rds'))]
 gene_list_renamer = c('Burden/SKAT combined', 'DeepRVAT discoveries')
 names(gene_list_renamer) = c('baseline_only', 'deeprvat_discoveries')
 
@@ -97,7 +124,6 @@ all_combined_metrics %>% distinct(model_name)
 
 ```{r}
 baseline_btypes = unique(sapply(strsplit(grep('baseline-', all_combined_metrics %>% distinct(model_name) %>% pull(model_name), value = TRUE), "-"), function(x) x[2]))
-
 baseline_methods =  paste('baseline', baseline_btypes, sep = '-')
 method_gene_list_filter = quo((`rare_burden` %in% baseline_methods & gene_list == 'baseline_only') | (`rare_burden` == 'deeprvat-avg' & gene_list == 'deeprvat_discoveries'))
 method_gene_list_filter
@@ -106,20 +132,16 @@ method_gene_list_filter
 
 ## Plotting 
 ```{r}
-label_default_size = 14 #default ggarrange size
-default_plot_width = 15.5 #used by brian
+label_default_size = 14 
+default_plot_width = 15.5 
 
 
-method_names = c(#'baseline-cadd_10' = 'CADD >10', 
-                 #'baseline-cadd_20' = 'CADD >20', 
-                  "baseline-cadd" = 'CADD',
+method_names = c("baseline-cadd" = 'CADD',
                  "baseline-plof" = 'pLOF',
-                 #"baseline-polyphen_damaging" = 'PolyPhen2 Probably Damaging',
                  "baseline-polyphen" = 'PolyPhen2',
                 "baseline-primateai" = 'PrimateAI',
                 "baseline-sift"= 'SIFT',
                 "baseline-splicai" = 'SpliceAI',
-                # 'baseline-absplice'= 'AbSplice',
                 'deeprvat-avg' = 'DeepRVAT',
                 'covariates-PRS' = 'common PRS')
 
@@ -148,13 +170,6 @@ model_order
 
 all_combined_metrics = all_combined_metrics %>% mutate(gene_list = ifelse(grepl('covariates', model_name), 'None', str_split(model_name, '-',  simplify = TRUE)[,3]))
 
-# deeprvat_avg = all_combined_metrics %>% filter(method == 'deeprvat') %>% 
-#   group_by_at(vars(-model_name, -.estimate)) %>%
-#   summarise(.estimate = mean(.estimate)) %>% mutate(model_name = paste('deeprvat-avg', gene_list, sep = '-'))
-# 
-# 
-# all_combined_metrics = rbind(all_combined_metrics, deeprvat_avg)
-
 #dummy rows for covariates for all gene lists
 covariates_res = all_combined_metrics %>% filter(grepl('covariates', model_name))
 for (this_gene_list in unique(all_combined_metrics$gene_list)){
@@ -177,15 +192,13 @@ all_combined_metrics[['model']] =  factor(all_combined_metrics[['model']], model
 ```{r}
 unique(all_combined_metrics$model)
 delta_df = all_combined_metrics %>%
-  # filter(model %in% c("baseline-plof", "baseline-cadd",
-  #                                                       "covariates-PRS", "deeprvat-avg")) %>%
   select(-model_name) %>%
-  # filter(gene_list == "deeprvat_discoveries" & .metric == 'rsq') %>%
   pivot_wider(names_from = model, values_from = .estimate) %>%
   pivot_longer(all_of(grep('covariates', model_order, invert = TRUE, value = TRUE)),
                names_to = 'rare_burden', values_to = 'r2_rare') %>%
   mutate(delta_r2 = r2_rare - `covariates-PRS`) %>%
-  mutate(ratio_r2 = delta_r2/`covariates-PRS` )
+  mutate(ratio_r2 = delta_r2/`covariates-PRS` )  %>%
+  filter(phenotype %in% phenotypes) 
 delta_df %>% filter(.metric == 'rsq')
 
 
@@ -197,15 +210,16 @@ method_map =  c('topq' = 'Top', 'bottomq' = 'Bottom', 'both' = 'highest/largest'
 
 ## logistic model results
 ```{r}
-logistic_model_res_path = file.path(experiment_directory, 'phenotype_prediction/models/logistic_models/')
-logistic_model_metrics = readRDS(file.path(logistic_model_res_path, 'plotting_data', paste0('combined_metrics_', phenotype_suffix, '_', fdr,'.Rds')))
+logistic_model_res_path = file.path(exp_dir, 'models/logistic_models/', paste('top', top_n, sep = '_'))
+
+
+logistic_model_metrics = readRDS(file.path(logistic_model_res_path, 'plotting_data', paste0('combined_metrics_', phenotype_suffix, '_', fdr,'.Rds'))) 
 
 logistic_model_metrics = logistic_model_metrics %>% 
   mutate(model_name = sub('deeprvat-', 'deeprvat-avg-', model_name)) %>%
   separate(col = model_name, into = c('burden', 'vtype_repeat', 'gene_list'), sep = '-', remove = FALSE) %>%
   filter(!grepl('_', vtype_repeat)) %>% #remove cadd_10 ..
   mutate(rare_burden = paste(burden, vtype_repeat, sep = '-'))
-logistic_model_metrics %>% distinct(vtype_repeat)
 logistic_model_metrics %>% distinct(rare_burden)
 
 
@@ -215,6 +229,8 @@ for (this_gene_list in na.omit(unique(logistic_model_metrics$gene_list))){
 }
 logistic_model_metrics = drop_na(logistic_model_metrics, gene_list)
 rare_burden_models = grep('covariates', unique(logistic_model_metrics$rare_burden), invert = TRUE, value = TRUE)
+
+logistic_model_metrics %>% distinct(rare_burden)
 
 delta_df_logistic = logistic_model_metrics %>% select( -model_name, -vtype_repeat, -burden) %>%
   pivot_wider(names_from = rare_burden, values_from = .estimate) %>% 
@@ -228,9 +244,11 @@ delta_df_logistic %>% distinct(rare_burden, gene_list)
 
 delta_df_logistic = delta_df_logistic %>% mutate(extreme_quantile_str = paste0(top_quantile * 100, '%'))
 delta_df_logistic[['extreme_direction_string']] = method_map[as.character(delta_df_logistic[['extreme_direction']])]
-delta_df_logistic = delta_df_logistic %>% mutate(outlier_mode_name = paste(extreme_direction_string, extreme_quantile_str))
-
+delta_df_logistic = delta_df_logistic %>% mutate(outlier_mode_name = paste(extreme_direction_string, extreme_quantile_str))  %>%
+  filter(phenotype %in% phenotypes) 
+delta_df_logistic %>% distinct(phenotype)
 ```
+
 
 ## Replication in extreme quantiles plot
 
@@ -254,6 +272,7 @@ for (outlier_mode in c('topq', 'bottomq')){
 }
 
 ranked_df_combined = do.call(rbind, ranked_df_list) %>%
+  filter(phenotype %in% phenotypes) %>%
   mutate(extreme_quantile_str = paste0(extreme_quantile * 100, '%'))
 ranked_df_combined[['outlier_mode']] = factor(method_map[ranked_df_combined[['outlier_mode']]], levels = method_map)
 # mean(ranked_df_combined %>% filter(max_rank == 21 & `Rare estimator` == 'baseline-cadd') %>% pull(sum))
@@ -276,6 +295,9 @@ for (this_quantile in c(0.99, 0.999)){
 }
 enrichment_combined = do.call(rbind, enrichment_list)
 
+enrichment_combined = enrichment_combined %>%
+  filter(phenotype %in% phenotypes) 
+enrichment_combined %>% distinct(phenotype)
 
 ```
 
@@ -307,27 +329,26 @@ avg_rel_improvement_df = enrich_score_df  %>% select(model, prs_quantile, min_z_
   # summarise(enrichment = mean(prop_extreme_samples)/mean(prop_zero)) %>%
   ungroup()
 
-
 enrich_score_avg_df = enrich_score_df %>% #%>% filter(phenotype != 'Standing_height') %>%
   group_by(model_name, model, burden, vtype_repeat,  prs_quantile, min_z_score) %>%
   summarise(enrichment = mean(enrichment)) %>%
   # summarise(enrichment = mean(prop_extreme_samples)/mean(prop_zero)) %>%
   ungroup()
+
+enrich_score_df %>% filter(min_z_score > 0 & min_z_score < 0.004 & model == 'deeprvat-avg' & prs_quantile == '99% quantile') 
 ```
 
 ### get largest threshold where enrichment for no phenotype/method is 0
 ```{r}
-threshold_range <- seq(3, 4, by = 0.01)
+threshold_range <- seq(1, 4, by = 0.01)
 
 # Initialize the max_z_score variable
 max_z_score <- 0
 
 # Iterate over each threshold in the range
 for (threshold in threshold_range) {
-  # Filter the data frame based on the threshold
   filtered_df <- enrich_score_df[enrich_score_df$min_z_score <= threshold, ]
   
-  # Check if all values in Value2 are non-zero
   if (all(filtered_df$enrichment != 0)) {
     max_z_score <- threshold
   }
@@ -414,10 +435,11 @@ p_box_lin = ggplot(data=delta_df %>%
           remove_y_expand +
           theme(axis.text.x = element_text(angle = 44,  hjust =1))
 print(p_box_lin)
-#ggsave(file.path(plot_out_path,'linear_box_rsquared.png'), p_box_lin, height = 6, width = 4)
 
 # paper_plots[['linear_boxplot']] = p_box_lin
 ```
+
+
 ```{r}
 # only inidicate if DeepRVAT  is not significantly larger than others 
 p_box_lin_ns_mark_only = ggplot(data=delta_df %>%
@@ -431,7 +453,8 @@ p_box_lin_ns_mark_only = ggplot(data=delta_df %>%
                              labels = method_names) +
           scale_fill_manual(values = color_mapping, limits = names(color_mapping),labels = names(color_mapping), guide = 'none') +
           scale_color_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') +
-          theme_cowplot() +
+          theme_classic() +
+          base_theme_wo_strip +
           ##
           # everything is siginificant so no comparison needed
           ##
@@ -444,11 +467,17 @@ p_box_lin_ns_mark_only = ggplot(data=delta_df %>%
           #             # step_increase = 0.1,
           #             size = 0.2, vjust = 0.5,
           #             tip_length = 0.02) +
+          # scale_y_continuous(labels = scales::percent, limits = c(-0.025, 0.1)) +
           remove_y_expand +
           theme(axis.text.x = element_text(angle = 44,  hjust =1))
 print(p_box_lin_ns_mark_only)
-
 paper_plots[['linear_boxplot']] = p_box_lin_ns_mark_only
+```
+
+```{r}
+delta_df %>%filter(fdr == 0.05 & .metric == 'rsq') %>%
+               filter(!! method_gene_list_filter) %>% arrange(desc(ratio_r2)) %>%
+  mutate(perc = ratio_r2*100 )
 ```
 
 
@@ -460,6 +489,7 @@ p_box_list = list()
 for (top_bottom_q in c('bottomq', 'topq')){
 
   plot_df = delta_df_logistic %>%
+    # filter(phenotype %in% new_phenotypes) %>% 
      filter(extreme_direction == top_bottom_q & top_quantile == this_top_quantile) %>%
          filter(fdr == 0.05 & .metric == 'pr_auc') %>%
            filter(!! method_gene_list_filter)
@@ -482,7 +512,8 @@ for (top_bottom_q in c('bottomq', 'topq')){
                              labels = method_names) +
             scale_fill_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') + 
             scale_color_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') + 
-            theme_cowplot() +
+            theme_classic() +
+            base_theme_wo_strip +
             geom_signif(data = plot_df, color = 'grey30',
                         comparisons = my_comparisons, 
                         map_signif_level=c("***"=0.001, "**"=0.01, "*"=0.05, "ns" = 0.51), 
@@ -502,12 +533,20 @@ for (top_bottom_q in c('bottomq', 'topq')){
   p_box_list = append(p_box_list, list(p_box))
   # paper_plots[[paste('box_logistic', top_bottom_q, sep = '_')]] = p_box
    
-  #ggsave(file.path(plot_out_path, paste0(paste('logistic_box', top_bottom_q, this_top_quantile, metric, sep = '_'), '.png')), p_box, height = 6, width = 4)
 }
 box_combined = ggarrange(plotlist = p_box_list)
 print(box_combined)
 # paper_plots[['box_logistic']] = box_combined
 ```
+```{r}
+delta_df_logistic %>%
+     filter(top_quantile == this_top_quantile) %>%
+    filter(fdr == 0.05 & .metric == 'pr_auc') %>%
+           filter(!! method_gene_list_filter) %>% 
+  arrange(desc(ratio_delta_auprc))
+```
+
+
 ```{r}
 delta_df_logistic %>%
      filter(top_quantile == this_top_quantile) %>%
@@ -549,7 +588,8 @@ for (top_bottom_q in c('bottomq', 'topq')){
                                labels = method_names) +
             scale_fill_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') + 
             scale_color_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') + 
-            theme_cowplot() +
+            theme_classic() +
+            base_theme_wo_strip +
             scale_y_continuous(labels = scales::percent) +
            theme(axis.text.x = element_text(angle = 44,  hjust =1),
                          strip.background = facet_background)
@@ -593,7 +633,8 @@ p <- ggplot(data = ranked_df_combined_avg %>%
   geom_abline(slope = 1, intercept = 0, linetype = 'dotted', color = 'grey') +
   annotate("segment", x = -Inf, xend = Inf, y = -Inf, yend = -Inf) +
   annotate("segment", x = -Inf, xend = -Inf, y = -Inf, yend = Inf) +
-  theme_cowplot() +
+  theme_classic() +
+  base_theme_wo_strip +
   theme(
         # strip.text = element_text(size = 10),
         axis.text.x = element_text(angle = 45, hjust = 1),
@@ -602,27 +643,11 @@ p <- ggplot(data = ranked_df_combined_avg %>%
 
 p
 paper_plots[['extreme_prediction']] = p
-# Add x-axis and y-axis labels to the first plot in the gri
 
-#ggsave(file.path(plot_out_path, paste0(paste('delta_outlier_in_extreme_enrichment_all_traits',  sub('%', '',this_extreme_quantile), sep = '_'), '.png')), p,  height = 3.5, width = 6)
 ```
 
 
-```{r}
-plot_data = enrich_score_avg_df %>% filter(min_z_score <= max_z_score)
-p = ggplot(data = plot_data,
-           aes(x = min_z_score, y = enrichment, color = model, linetype = prs_quantile)) +
-    geom_line(size = 0.3) +
-    theme_cowplot() +
-    scale_color_manual(values = color_mapping, limits = names(color_mapping), labels = method_names[names(color_mapping)], breaks = names(color_mapping) ) + #, guide = NULL) + #limits = c(baseline_methods, 'deeprvat-avg') + 
-    labs(x = 'Phenotype outlier (z-score)', y = 'Enrichment vs baseline', color = '', linetype = '') +
-  theme(legend.position = c(0.05, 0.7),
-        legend.text = element_text(size = 10),
-        legend.spacing.y = unit(0.05, "cm"))
 
-p
-paper_plots[['extreme_enrichment']] = p
-```
 
 ```{r}
 rare_burdens = delta_df %>% distinct(rare_burden) %>% pull
@@ -633,10 +658,10 @@ p_legend = ggplot(data=delta_df %>%
            aes(x=phenotype, y=delta_r2, fill = rare_burden)) +
           geom_bar(stat="identity", position=position_dodge()) + 
           scale_fill_manual(values = color_mapping[rare_burdens], limits = rare_burdens, labels = method_names[rare_burdens], breaks = rare_burdens) + 
-          theme_cowplot() +
-          scale_x_discrete(labels = phenotype_dict) +
-          theme_cowplot() +
-          theme(axis.text.x = element_text(angle = 44,  hjust =1),
+          theme_classic() +
+          base_theme_wo_strip +
+          theme(axis.text.x = element_text(angle = 44,  hjust =1, size = font_size),
+                legend.key.size = unit(0.3, "cm"),
                 legend.position="bottom",
                 legend.title = element_blank(),
                 legend.box.margin = margin(0,0,0,1)) #+
@@ -654,7 +679,60 @@ paper_plots[['legend']] = mylegend
 ```
 
 
+```{r}
+methods =  avg_rel_improvement_df %>% distinct(model) %>% filter(!grepl(paste(burdens_to_exclude, collapse = '|'), model)) %>% pull(model)
+p = ggplot(data = avg_rel_improvement_df %>% filter(min_z_score <= max_z_score & prs_quantile == '99% quantile'),
+         aes(x = min_z_score, y = rel_improvment_common, color = model)) +
+  # geom_point(size = 0.2) +
+  geom_line(size = 0.3) +
+  theme_classic() +
+  base_theme_wo_strip +
+  scale_color_manual(values = color_mapping[methods], limits = methods,
+                     labels = method_names[methods]) +
+  labs(x = 'Phenotype outlier (z-score)', y = 'Relative enrichment vs baseline', color = '', linetype = '') +
+  scale_y_continuous(labels = scales::percent) +
+  theme(legend.position = 'none',
+        # legend.position = c(0.05, 0.7),
+        legend.text = element_text(size = 10),
+        legend.spacing.y = unit(0.05, "cm"))
+
+paper_plots[['extreme_enrichment']] = p
+p
+avg_rel_improvement_df %>% filter(min_z_score <= max_z_score & min_z_score > max_z_score - 0.005 & prs_quantile == '99% quantile') %>% arrange(desc(rel_improvment_common))
+```
+
+
 ## Arrange main figure
+```{r}
+rare_burdens = delta_df %>% distinct(rare_burden) %>% pull
+p_legend = ggplot(data=delta_df %>% 
+             filter(fdr == 0.05) %>%
+               filter(rare_burden != 'missense') %>%
+               filter(gene_list == 'deeprvat_discoveries' & .metric == 'rsq'), 
+           aes(x=phenotype, y=delta_r2, fill = rare_burden)) +
+          geom_bar(stat="identity", position=position_dodge()) + 
+          scale_fill_manual(values = color_mapping[rare_burdens], limits = rare_burdens, labels = method_names[rare_burdens], breaks = rare_burdens) + 
+          theme_classic() +
+          base_theme_wo_strip +
+          theme(axis.text.x = element_text(angle = 44,  hjust =1, size = font_size),
+                legend.key.size = unit(0.3, "cm"),
+                legend.text = element_text(size = title_font_size),
+                legend.position="bottom",
+                legend.title = element_blank(),
+                legend.box.margin = margin(0,0,0,1)) #+
+          # guides(fill = guide_legend(nrow = 1))
+print(p_legend)
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+mylegend<-g_legend(p_legend)
+mylegend
+paper_plots[['legend']] = mylegend
+```
+
 ```{r}
 
 
@@ -667,48 +745,18 @@ gt = grid.arrange(paper_plots[['linear_boxplot']],
              paper_plots[['box_logistic']],
             paper_plots[['legend']],
              paper_plots[['extreme_prediction']],
-             paper_plots[['extreme_enrichment']],
+             paper_plots[['extreme_enrichment']] + theme(plot.margin = margin(0, 0.2, 0.9, 0, "cm")),
           nrow = 4, ncol = 9,
           layout_matrix = lay, heights = c(0.1,1.3,0.1,1),
           widths = c(1,1,1,1,1,0.5,1,1,1))
 p = as_ggplot(gt) +                                # transform to a ggplot
-  draw_plot_label(label = c("a", "b", "c", "d"), size = 25,
+  draw_plot_label(label = c("a", "b", "c", "d"), size = 20,
                   x = c(0.00, 3/9, 0.05, 5.5/9), y = c(1, 1,0.47, 0.47)) # Add labels
 
-ggsave(file.path(plot_out_path, 'figure_4.png'), p, width = 24, height = 20, unit = 'cm')
-
-```
-
-
-```{r}
-plot_width = 36
-# generated by figure_4_hold_out_phenotype_prediction.Rmd
-p_rel_logistic = readRDS('p_rel_logistic.Rds')
-p_rel_linear = readRDS( 'p_rel_linear.Rds')
-
-p_rel_linear = p_rel_linear + theme(plot.margin = margin(0,0,0,20))
-p_rel_logistic = p_rel_logistic + theme(plot.margin = margin(0,0,0,20))
-
-(1/6) * 2
-lay <- rbind(c(NA,NA,NA,NA,NA,NA,NA,NA,NA,NA),
-             c(1,1,1,2,2,2,2,2,2,6),
-             c(NA,3,3,3,3,NA, 5, 5,5,7),
-             c(4,4,4,4,4,NA,5, 5,5, 7))
-gt = grid.arrange(paper_plots[['linear_boxplot']],
-             paper_plots[['box_logistic']],
-            paper_plots[['legend']],
-             paper_plots[['extreme_prediction']],
-             paper_plots[['extreme_enrichment']],
-            p_rel_linear, p_rel_logistic,
-          nrow = 4, ncol = 10,
-          layout_matrix = lay, heights = c(0.1,1.3,0.3,1),
-          widths = c(1,1,1,1,1,0.2,1,1,1,3))
-p = as_ggplot(gt) +                                # transform to a ggplot
-  draw_plot_label(label = c("a", "b", "c", "d", 'e', 'f'), size = plot_width/default_plot_width * label_default_size,
-                  x = c(0, 2.5/10, 0, 4.5/10, 7.3/10, 7.3/10), y = c(1, 1,0.41, 0.5, 1, 0.5)) # Add labels
+# ggsave(file.path(plot_out_path, 'figure_4.png'), p, width = 24, height = 20, unit = 'cm')
 p
-ggsave(file.path(plot_out_path, 'figure_4_v2.png'), p, width = plot_width, height = 24, unit = 'cm')
 ```
+
 
 
 
@@ -769,38 +817,15 @@ p_box_gene_list = ggarrange(p_box_lin_gene_list ,
           labels = 'auto',
           font.label = list(size = plot_width/default_plot_width * label_default_size),
           legend="bottom") 
-
-ggsave(file.path(plot_out_path, 'figure_4_supp_1.png'), width = plot_width, height = 10, unit = 'cm',
-       dpi = 600)
-ggsave(file.path(plot_out_path, 'figure_4_supp_1.pdf'), width = plot_width, height = 10, unit = 'cm',
-       dpi = 600)
+p_box_gene_list          
+# ggsave(file.path(plot_out_path, 'figure_4_supp_1.png'), width = plot_width, height = 10, unit = 'cm',
+#        dpi = 600)
+# ggsave(file.path(plot_out_path, 'figure_4_supp_1.pdf'), width = plot_width, height = 10, unit = 'cm',
+#        dpi = 600)
 
 ```
 
-## relative improvement enrichment (for fig. 4e)
-```{r}
-methods =  avg_rel_improvement_df %>% distinct(model) %>% filter(!grepl(paste(burdens_to_exclude, collapse = '|'), model)) %>% pull(model)
-methods = 
-p = ggplot(data = avg_rel_improvement_df %>% filter(min_z_score <= max_z_score),
-         aes(x = min_z_score, y = rel_improvment_common, color = model)) +
-  # geom_point(size = 0.2) +
-  geom_line(size = 0.3) +
-  facet_wrap(vars(prs_quantile), scales = 'free', ncol = 2) +
-  theme_cowplot() +
-  scale_color_manual(values = color_mapping[methods], limits = methods,
-                     labels = method_names[methods]) +
-  labs(x = 'Phenotype outlier (z-score)', y = 'Relative enrichment vs baseline', color = '', linetype = '') +
-  scale_y_continuous(labels = scales::percent) +
-  theme(strip.background = facet_background)
 
-
-print(p)
-
-ggsave(file.path(plot_out_path, 'figure_4_supp_2.png'), width = 18, height = 12, unit = 'cm',
-       dpi = 600)
-ggsave(file.path(plot_out_path, 'figure_4_supp_2.pdf'), width = 18, height = 12, unit = 'cm',
-       dpi = 600)
-```
 
 
 
