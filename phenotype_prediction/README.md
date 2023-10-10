@@ -51,8 +51,3 @@ Then, the actual phenotype prediction models will be fitted using the following 
 When running the piplein, make sure the --use-conda flag is set
 
 
-## Running the pipeline holding out 1 phenotype from DeepRVAT training
-
-To generate the data for Figure 4 e&f,`phenotype_prediction_pipeline_hold_out_pheno.snakefile` has to be run. 
-The pipeline assumes that the standard CV pipeline `run_deeprvat_cv.snakefile` has already been run. 
-The `data_dir` in  `run_deeprvat_cv_hold_out_pheno.snakefile` and `phenotype_prediction_pipeline_hold_out_pheno.snakefile` has to be set to directory where `run_deeprvat_cv.snakefile` has been run. 

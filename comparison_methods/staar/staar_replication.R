@@ -6,6 +6,7 @@ require(tidyr)
 require(ggplot2)
 require(data.table)
 
+phenotype_suffix = snakemake@params[["phenotype_suffix"]] #TODO delete this later
 
 masks = snakemake@params[["masks"]]
 code_dir = snakemake@params[["code_dir"]]
@@ -15,6 +16,11 @@ source(file.path(code_dir, "../../utils.R"))  #get phenotype renamer
 
 print(paste("Analyzing results for phenotypes:", query_phenotypes))
 
+phenotypes_map = gsub("_", " ", query_phenotypes)
+names(phenotypes_map) = query_phenotypes
+to_add <- query_phenotypes[!(query_phenotypes %in% names(phenotypes_deeprvat))]
+phenotypes_deeprvat <- c(phenotypes_deeprvat, mapply(function(name, value) setNames(list(value), name),
+                                       to_add, phenotypes_map[to_add]))
 alpha = 0.05
 all_staar_res = tibble()
 
@@ -27,33 +33,50 @@ for (pheno in query_phenotypes) {
         this_res_file = file.path(base_exp_dir, file_phenotype, mask, "results", "burden_associations.parquet")
         print(this_res_file)
         if (file.exists(this_res_file)) {
+            print(paste('using this res file', this_res_file))
             this_df = read_parquet(this_res_file) %>%
                 mutate(phenotype = file_phenotype, mask = mask)
-            all_staar_res = rbind(all_staar_res, this_df)
+            all_staar_res = rbind.fill(all_staar_res, this_df)
         } else {
-            message(paste("Failed to read results for phenotype", pheno, sep = ":"))
+            this_res_file = file.path(base_exp_dir, file_phenotype, mask, "results", "burden_associations_testing.parquet")
+            print(paste('using this res file', this_res_file))
+            this_df = read_parquet(this_res_file) %>%
+            mutate(phenotype = file_phenotype, mask = mask) %>% rename('EAC'='CAF')
+            all_staar_res = rbind.fill(all_staar_res, this_df)
         }
     }
 }
-
+print(all_staar_res %>% distinct(phenotype))
+all_staar_res = all_staar_res %>%
+    mutate(Trait = recode(phenotype, !!!phenotypes_deeprvat))
 
 correction_method = "BH"
 eac_threshold = 10  #same as used by Li et al. 2020 (STAAR paper)
 staar_corrected = all_staar_res %>%
     filter(EAC >= eac_threshold) %>%
-    group_by(phenotype) %>%
+    group_by(Trait) %>%
     mutate(pval_adj = p.adjust(pval, method = correction_method)) %>%
     mutate(Significant = factor(pval_adj < alpha, levels = c("TRUE", "FALSE"))) %>%
     ungroup()
 
 sig_counts_staar = staar_corrected %>%
-    distinct(phenotype, Significant, gene, .keep_all = TRUE) %>%
-    filter(Significant == TRUE) %>%
-    group_by(phenotype) %>%
-    summarise(sig_genes = n())
+    drop_na(Significant) %>% 
+    distinct(Trait, Significant, gene, .keep_all = TRUE) %>%
+    group_by(Trait) %>%
+    mutate(Significant = as.logical(Significant)) %>%
+    summarise(discoveries = sum(Significant))
+    
+sig_counts_staar = rbind(sig_counts_staar, 
+    tibble(Trait = 'All traits',
+    discoveries = sum(sig_counts_staar[['discoveries']])))
 
+print(sig_counts_staar)
 sum(sig_counts_staar %>%
-    pull(sig_genes))
+    pull(discoveries))
+
+saveRDS(staar_corrected, file.path(dirname(out_path), paste0('staar_corrected', phenotype_suffix, '.Rds')))
+saveRDS(sig_counts_staar, file.path(dirname(out_path), paste0('sig_counts_staar', phenotype_suffix, '.Rds')))
+write_parquet(sig_counts_staar, file.path(dirname(out_path), paste0('sig_counts_staar', phenotype_suffix, '.parquet')))
 
 comparison <- read_parquet(file.path(code_dir, "../../data/comparison_results.parquet")) %>%
     mutate(in_comparison = TRUE) %>%
@@ -85,7 +108,6 @@ add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotyp
 
     rep_list = append(rep_list, list(df_all))
     for (this_pheno in unique(this_df[[pheno_col]])) {
-        print(this_pheno)
         pheno_rep <- this_df %>%
             filter(across(all_of(pheno_col)) == this_pheno) %>%
             arrange(qval) %>%
@@ -101,14 +123,28 @@ add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotyp
     return(df_combined)
 }
 
-all_staar_res = all_staar_res %>%
-    left_join(comparison %>%
-        select(phenotype, Trait))
-assertthat::assert_that(nrow(all_staar_res %>%
-    filter(is.na(Trait))) == 0)
-replication_staar = add_replication(all_staar_res %>%
-    select(-phenotype), comparison %>%
-    select(-phenotype_standardized, phenotype, -`__index_level_0__`), pheno_col = "Trait") %>%
+# all_staar_res = all_staar_res %>%
+#     left_join(comparison %>%
+#         select(phenotype, Trait))
+missing_replication_traits = setdiff(c(unlist(unique(all_staar_res['Trait']))), 
+    unlist(unique(comparison['Trait'])))
+print(paste('Traits not present in replication data', missing_replication_traits, 'excluding these traits'))
+all_staar_res = as.data.table(all_staar_res)
+all_staar_res = all_staar_res[!(Trait %in% missing_replication_traits)]
+all_staar_res = as_tibble(all_staar_res)
+print(all_staar_res %>% distinct(Trait))
+
+# assertthat::assert_that(nrow(all_staar_res %>%
+#     filter(is.na(Trait))) == 0)
+
+if (nrow(all_staar_res %>%
+    filter(is.na(Trait))) == 0){
+        print('caution: not all Traits present in replicatoin data set!')
+    }
+
+replication_staar = add_replication(all_staar_res, comparison %>%
+    select(-phenotype_standardized, phenotype), pheno_col = "Trait") %>%
+    # select(-phenotype_standardized, phenotype, -`__index_level_0__`), pheno_col = "Trait") %>%
     rename(Method = mask) %>%
     select(Rank, Replicated, Significant, Method, Trait, gene) %>%
     mutate(exp_name = "STAAR")

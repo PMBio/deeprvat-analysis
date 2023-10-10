@@ -25,7 +25,8 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from deeprvat.data import DenseGTDataset
-from seak.scoretest import ScoretestNoK
+from seak import scoretest
+
 
 logging.basicConfig(
     format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s",
@@ -306,10 +307,15 @@ def call_score(GV, null_model_score, pval_dict, test_type):
     if pv < 1e-3 and test_type == "burden":
         logger.info("Computing regression coefficient")
         # if gene is quite significant get the regression coefficient + SE
-        beta = null_model_score.coef(GV)
-        logger.info(f"Regression coefficient: {beta}")
-        pval_dict["beta"] = beta["beta"][0, 0]
-        pval_dict["betaSd"] = np.sqrt(beta["var_beta"][0, 0])
+        # only works for quantitative traits
+        try:
+            beta = null_model_score.coef(GV)
+            logger.info(f"Regression coefficient: {beta}")
+            pval_dict["beta"] = beta["beta"][0, 0]
+            pval_dict["betaSd"] = np.sqrt(beta["var_beta"][0, 0])
+        except:
+            pval_dict["beta"] = None
+            pval_dict["betaSd"] = None
     return pval_dict
 
 
@@ -320,7 +326,7 @@ def test_gene(
     grouped_annotations: pd.DataFrame,
     dataset: DenseGTDataset,
     weight_cols: List[str],
-    null_model_score: ScoretestNoK,
+    null_model_score: scoretest.ScoretestNoK,
     test_config: Dict,
     var_type,
     test_type,
@@ -485,7 +491,13 @@ def run_association_(
 ) -> pd.DataFrame:
     # initialize the null models
     # ScoretestNoK automatically adds a bias column if not present
-    null_model_score = ScoretestNoK(Y, X)
+    
+    if len(np.unique(Y)) == 2:
+        print('Fitting binary model since only found two distinct y values')
+        null_model_score = scoretest.ScoretestLogit(Y, X)
+    else:
+        null_model_score = scoretest.ScoretestNoK(Y, X)
+    # null_model_score = scoretest.ScoretestNoK(Y, X)
     stats = []
     GW_list = {}
     GW_full_list = {}
@@ -815,9 +827,10 @@ def run_association(
     logger.info("Grouping variants by gene")
     exploded_annotations = (
         dataset.annotation_df.query("id in @all_variants")
-        .explode("gene_ids")
+        .explode('gene_ids').reset_index()
         .drop_duplicates()
-    )  # row can be duplicated if a variant is assigned to a gene multiple times
+        .set_index('id')
+    )     
     variant_to_aa_map = None
     if (
         ("missense" in var_type)

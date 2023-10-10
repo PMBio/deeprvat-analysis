@@ -27,8 +27,15 @@ DATA_SLOT_DICT = {
 def cli():
     pass
 
-module_folder_dict = {'seed_genes' : 'baseline', 
-'deeprvat': 'deeprvat', 'alternative_burdens' : 'alternative_burdens'}
+
+
+module_folder_dict = {
+    "seed_genes": "baseline",
+    "deeprvat": "deeprvat",
+    "alternative_burdens": "alternative_burdens",
+}
+
+
 @cli.command()
 @click.option("--module", "-m", multiple=True)
 @click.option("--fold", type=int)
@@ -59,8 +66,8 @@ def spread_config(
             # data_slots = ['data', 'training_data'] if module == 'deeprvat' else ['data']
             data_slots = DATA_SLOT_DICT[module]
             for data_slot in data_slots:
-                annotations = config[module][data_slot]["dataset_config"]['annotations']
-                af_pattern = re.compile(r'.*(_MAF|_AF)\b')
+                annotations = config[module][data_slot]["dataset_config"]["annotations"]
+                af_pattern = re.compile(r".*(_MAF|_AF)\b")
                 rare_maf_col = [s for s in annotations if af_pattern.match(s)]
                 print(rare_maf_col)
                 assert len(rare_maf_col) == 1
@@ -94,7 +101,7 @@ def spread_config(
                         ] = f"{rare_maf_col} < {association_maf} and {rare_maf_col} > 0"
                     logger.info("Writing baseline directories")
                     baseline_base_path = f"{os.getcwd()}/cv_split{fold}/baseline"
-                    logger.info(f'Setting baseline path to {baseline_base_path}')
+                    logger.info(f"Setting baseline path to {baseline_base_path}")
                     config[module]["baseline_results"] = [
                         {"base": baseline_base_path, "type": test_name}
                         for test_name in [
@@ -108,7 +115,7 @@ def spread_config(
             logger.info(f"Writing config for module {module}")
             split_suffix = "_test" if split == "test" else ""
             with open(f"{out_path}/{module_folder_dict[module]}/config{split_suffix}.yaml", "w") as f:
-                yaml.dump(config[module], f)
+
 
 
 @cli.command()

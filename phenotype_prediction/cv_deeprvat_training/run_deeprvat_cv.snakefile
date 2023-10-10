@@ -1,7 +1,6 @@
 
 from snakemake.utils import Paramspace
 from snakemake.utils import min_version
-from name_mappings import BTYPES_DICT, PLOF_CONSEQUENCES
 import os
 min_version("6.0")
 
@@ -14,7 +13,18 @@ debug_flag = config.get('debug', False)
 # debug_flag = True #TODO change this
 debug = '--debug ' if debug_flag else ''
 
+BTYPES_DICT = {'is_plof': 'plof',
+              'CADD_raw':'cadd',
+              'AbSplice_DNA': 'absplice',
+              'PrimateAI_score': 'primateai',
+              'sift_score': 'sift',
+              'polyphen_score': 'polyphen',
+              'SpliceAI_delta_score': 'splicai',
+              'Consequence_missense_variant': 'missense'}
 
+
+PLOF_CONSEQUENCES = [f'Consequence_{c}'  for c in ('splice_acceptor_variant', 'splice_donor_variant',
+            'frameshift_variant', 'stop_gained', 'stop_lost', 'start_lost')]
 
 conda_check = 'conda info | grep "active environment"'
 cuda_visible_devices = 'echo CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES'
@@ -29,15 +39,16 @@ py_deeprvat = f'python {DEEPRVAT_DIR}/deeprvat'
 wildcard_constraints:
     repeat="\d+"
 
-cv_splits = 5 #todo undo this
+cv_splits = 5
 alt_burdens_chunks = 30
 repeats_to_compare = [6]
 phenotypes = config['phenotypes']
 phenotypes = phenotypes.keys() if type(phenotypes) == dict else phenotypes
-phenotypes_testing = phenotypes
-burden_phenotype = phenotypes_testing[0]
+
+burden_phenotype = 'Apolipoprotein_A'
 
 
+phenotypes_testing = config['phenotypes_testing']
 association_testing_maf = config.get('association_testing_maf', 0.001)
 
 n_bags = config['deeprvat']['training'].get('n_bags')
@@ -45,10 +56,8 @@ n_repeats = config['deeprvat'].get('n_repeats', 6)
 n_burden_chunks = config['deeprvat'].get('n_burden_chunks', 1) if not debug_flag else 2
 n_regression_chunks = config['deeprvat'].get('n_regression_chunks', 40) if not debug_flag else 2
 n_regression_chunks = 4
-
 config['seed_genes']['phenotypes'] = config['phenotypes']
 config['deeprvat']['phenotypes'] = config['phenotypes']
-
 
 btypes = config['alternative_burdens']['alt_burdens_data']['dataset_config']['rare_embedding']['config']['annotations']
 if 'Consequence_stop_lost' in btypes:
@@ -65,11 +74,11 @@ rule all:
                cv_split = range(cv_splits), phenotype=phenotypes_testing),
         expand("cv_split{cv_split}/deeprvat/{phenotype}/deeprvat/eval/all_results.parquet",
                cv_split = range(cv_splits), phenotype=phenotypes_testing),
+        expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/burdens_test/chunk{c}.finished',
+                p = burden_phenotype, c = range(n_burden_chunks), cv_split=range(cv_splits)),
         expand('cv_split{cv_split}/deeprvat/{p}/deeprvat/{b_dir}/burdens_zarr.created',
-                p = burden_phenotype, cv_split=range(cv_splits),
+                p = phenotypes_testing, cv_split=range(cv_splits),
                 b_dir=['burdens', 'burdens_test']),
-        expand('cv_split{cv_split}/baseline/{p}/eval/burden_associations.parquet',
-                p = phenotypes_testing, cv_split=range(cv_splits)),
         expand('cv_split{cv_split}/alternative_burdens/{phenotype}/{btype}/{b_dir}/burdens_zarr.created',
                 cv_split=range(cv_splits),
                 b_dir=['burdens', 'burdens_test'],
@@ -139,12 +148,12 @@ module deeprvat_workflow:
     config:
         config['deeprvat']
 
-use rule * from deeprvat_workflow exclude config, choose_training_genes, train_bagging, regress, compute_burdens, compute_burdens_test, best_bagging_run, cleanup_burden_cache, link_burdens, link_burdens_test, all_burdens  as deeprvat_*
+use rule * from deeprvat_workflow exclude config, choose_training_genes, train, regress, compute_burdens, compute_burdens_test, best_bagging_run, cleanup_burden_cache, link_burdens, link_burdens_test, all_burdens  as deeprvat_*
 
 use rule evaluate from deeprvat_workflow as deeprvat_evaluate with:
     params:
         prefix = 'cv_split{cv_split}/deeprvat',
-        use_seed_genes = '--use-seed-genes'
+        use_seed_genes = '--use-seed-genes '
 
 use rule regress from deeprvat_workflow as deeprvat_regress with:
     input:
@@ -168,6 +177,7 @@ use rule link_burdens from deeprvat_workflow as deeprvat_link_burdens with:
         prefix = 'cv_split{cv_split}/deeprvat'
 
 use rule compute_burdens from deeprvat_workflow as deeprvat_compute_burdens with:
+    priority: 100
     params:
         prefix = 'cv_split{cv_split}/deeprvat'
 
@@ -186,6 +196,7 @@ use rule best_training_run from deeprvat_workflow as deeprvat_best_training_run 
         prefix = 'cv_split{cv_split}/deeprvat'
 
 use rule train from deeprvat_workflow as deeprvat_train with:
+    priority: 1000
     params:
         prefix = 'cv_split{cv_split}/deeprvat',
         phenotypes = " ".join( #TODO like need the prefix here as well

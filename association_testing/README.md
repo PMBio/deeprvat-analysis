@@ -16,3 +16,5 @@ EXP=repeat_analysis && python compute_replication.py --analyze-all-repeats --out
 ```
 
 Use the notebook `rvat_figures.Rmd` to analyze the results.
+
+EXP=./ && python compute_replication.py --out-dir $EXP $EXP

@@ -176,6 +176,11 @@ def find_substring_position(substring, string_list):
     matches = [index for index, string in enumerate(string_list) if substring in string]
     return matches[0] if matches else -1
 
+def find_substring_position(substring, string_list):
+    matches = [index for index, string in enumerate(string_list) if substring in string]
+    return matches[0] if matches else -1
+
+
 @cli.command()
 @click.option("--result-dir", type=click.Path(exists=True), default="./")
 @click.option("--discoveries-file", type=click.Path(exists=True))
@@ -204,9 +209,9 @@ def prep_r_regression_data(
     logger.info(f"preparing input data for burden types {burden_types}")
     phenotype = phenotype.replace("_standardized", "")
     logger.info(f"Preparing data for phenotype: {phenotype}")
-    prs_mapper = pd.read_csv(config.get("prs_pheno_map"), header = None)
+    prs_mapper = pd.read_csv(config.get("prs_pheno_map"), header=None)
 
-    start_row = find_substring_position('PGS', prs_mapper[1])
+    start_row = find_substring_position("PGS", prs_mapper[1])
     PRS_DICT = dict(zip(prs_mapper.iloc[start_row:, 0], prs_mapper.iloc[start_row:, 1]))
 
     PRS_DICT = {

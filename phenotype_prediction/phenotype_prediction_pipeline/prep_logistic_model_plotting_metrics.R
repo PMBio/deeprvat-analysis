@@ -9,7 +9,7 @@ library(yardstick)
 
 phenotypes = snakemake@params[["phenotypes"]]
 logistic_model_res_path = snakemake@params[["input_res_path"]]
-fdr = snakemake@params[["fdr"]]
+fdr = snakemake@params[["fdr"]]#TODO remove this not actively used!
 phenotype_suffix = snakemake@params[["phenotype_suffix"]]
 top_bottom_q_vals = snakemake@params[["top_bottom_q_vals"]]
 top_quantiles = snakemake@params[["top_quantiles"]]

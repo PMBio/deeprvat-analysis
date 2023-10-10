@@ -16,28 +16,29 @@ For the timing experiments, the number of regression chunks was set to 1 in all 
 The timing experiments were only run for a single phenotype (Triglycerides)
 
 ```{r}
- 
-timing_dir = #'{timng_dir}' #Experiment directory. Has to point to the directory where the timing experiments have been performed
+## define directories here and comment out the sourcing 
+source(timing_paths.R)
+# timing_dir_staar = ...
+# timing_dir_monti = ...
+# timing_dir_seed_genes = ...
+# complete_seed_gene_experiment_dir = ...
+# deeprvat_train_time_res = ...
+# deeprvat_timing_dir = ...
 
 ```
 
 ```{r}
-plot_out_path = "./plots"
 plot_colors = c('Monti' = "aquamarine4", 'STAAR' = '#E6AB02','DeepRVAT' = '#7A2961')
-plot_colors_deeprvat = c('Monti' = "aquamarine4", 'STAAR' = '#E6AB02','DeepRVAT (with training)' = 'hotpink3', 'DeepRVAT (pre-trained)' = '#7A2961')
+plot_colors_deeprvat = c('Monti' = "aquamarine4", 'STAAR' = '#E6AB02','DeepRVAT (with training)' = '#7A2961', 'DeepRVAT (pre-trained)' = '#7A2961')
 
 facet_background = strip.background = element_rect(fill = "white", colour = "black", 
                 linewidth = rel(2))
 
 fancy_scientific <- function(l) {
-     # turn in to character string in scientific notation
      l <- format(l, scientific = TRUE)
-     # quote the part before the exponent to keep all the digits
      l <- gsub("^(.*)e", "'\\1'e", l)
-     # turn the 'e+' into plotmath format
      l <- gsub("e", "%*%10^", l)
      l <- gsub("\\+", "", l)
-     # return this as an expression
      parse(text=l)
 }
 my_margin = margin(t = 20, r = 0, b = 0, l = 10)
@@ -48,11 +49,8 @@ my_margin = margin(t = 20, r = 0, b = 0, l = 10)
 
 ## STAAR
 ```{r}
-timing_dir_staar = file.path(timing_dir, 'timing_staar')
-
 vtypes_staar  = c('disruptive_missense', 'missense',  'plof',  'plof_disruptive_missense',  'synonymous')
 exclude_synonymous_staar = FALSE
-
 ```
 
 ```{r}
@@ -82,7 +80,7 @@ staar_results %>% select(rep, time_inner, time_outer)
 staar_results %>% select(gene, time_outer, time_inner, rep) %>% 
   mutate(time_outer = as.numeric(time_outer),
          time_inner = as.numeric(time_inner)) %>%
-  rename('time_test' = 'time_inner') %>%
+  rename('time_test' = 'time_inner', 'time_complete' = 'time_outer') %>%
   filter(gene == 9)
 ```
 
@@ -90,19 +88,16 @@ staar_results %>% select(gene, time_outer, time_inner, rep) %>%
 avg_staar = staar_results %>% select(gene, time_outer, time_inner) %>% 
   mutate(time_outer = as.numeric(time_outer),
          time_inner = as.numeric(time_inner)) %>%
-  rename('time_test' = 'time_inner') %>%
+  rename('time_test' = 'time_inner', 'time_complete' = 'time_outer') %>%
   group_by(gene) %>% summarise_each(funs(sum(., na.rm = TRUE)))
 
 avg_staar
 ```
 ## monti
 ```{r}
-timing_dir_monti =  file.path(timing_dir, 'timing_monti')
-
 vtypes_monti  = c('deepripe','missense', 'missense_plof', 'plof', 
                   'spliceai',
                   'spliceai_plof')
-
 ```
 
 
@@ -113,7 +108,9 @@ for (t_type in c('burden', 'skat')){
   for (v_filter in vtypes_monti){
     pickle_output = py_load_object(file.path(timing_dir_monti, 'Triglycerides', v_filter, t_type, 'results/timing_chunk_0.pickle'))
     print(paste(t_type, v_filter, length(pickle_output)))
-    this_result = tibble(gene = as.integer(names(pickle_output[[1]])), time_test = as.numeric(pickle_output[[1]])) %>%
+    t1 = tibble(gene = as.integer(names(pickle_output[[1]])), time_test = as.numeric(pickle_output[[1]]))
+    t2 = tibble(gene = as.integer(names(pickle_output[[2]])), time_complete = as.numeric(pickle_output[[2]]))
+    this_result = left_join(t1, t2) %>%
       mutate(rep = paste(t_type, v_filter, sep = '-'))
     monti_results[[paste(t_type, v_filter, sep = '-')]] = this_result
     this_genes = this_result %>% distinct(gene) %>% pull(gene)
@@ -126,7 +123,6 @@ monti_results = do.call(rbind, monti_results)
 print(length(genes_monti))
 monti_results
 
-head(gene_list_monti[0])
 ```
 
 
@@ -134,10 +130,10 @@ head(gene_list_monti[0])
 monti_filters_to_exclude = c('burden-deepripe', 'skat-plof') #tests not used by Monti
 avg_monti = monti_results %>% 
   filter(!grepl(paste(monti_filters_to_exclude, collapse = '|'), rep)) %>%
-  select(gene, time_test) %>% 
+  select(gene, time_test, time_complete) %>% 
   group_by(gene) %>% summarise_each(funs(sum(., na.rm = TRUE)))
 
-  monti_results %>% distinct(rep)
+monti_results %>% distinct(rep)
 
 ```
 
@@ -145,12 +141,10 @@ avg_monti = monti_results %>%
 
 ### Seed gene discovery
 ```{r}
-timing_dir_seed_genes = file.path(timing_dir, 'timing_baselines')
 
 vtypes_seed_genes  = c('missense','plof')
 
 ```
-
 
 ```{r}
 gene_list_seed_genes = list()
@@ -159,7 +153,9 @@ for (t_type in c('burden', 'skat')){
   for (v_filter in vtypes_seed_genes){
     pickle_output = py_load_object(file.path(timing_dir_seed_genes, 'Triglycerides', v_filter, t_type, 'results/timing_chunk_0.pickle'))
     print(paste(t_type, v_filter, length(pickle_output)))
-    this_result =  tibble(gene = as.integer(names(pickle_output[[1]])), time_test = as.numeric(pickle_output[[1]])) %>%
+    t1 = tibble(gene = as.integer(names(pickle_output)), time_test = as.numeric(pickle_output))
+    # t2 = tibble(gene = as.integer(names(pickle_output[[2]])), time_complete = as.numeric(pickle_output[[2]]))
+    this_result = left_join(t1, t2) %>%
       mutate(rep = paste(t_type, v_filter, sep = '-'))
     seed_genes_results[[paste(t_type, v_filter, sep = '-')]] = this_result
     this_genes = this_result %>% distinct(gene) %>% pull(gene)
@@ -174,37 +170,53 @@ seed_genes_results
 
 head(gene_list_seed_genes[0])
 
+#sum across all tests for each gene
 avg_seed_genes = seed_genes_results %>% 
-  select(gene, time_test) %>% 
+  select(gene, time_test, time_complete) %>% 
   group_by(gene) %>% summarise_each(funs(sum(., na.rm = TRUE)))
 avg_seed_genes
 ```
 
 
+
+
+
+
 ```{r}
-### get number of considered genes per variant type after EAC filtering 
-# complete_seed_gene_experiment_dir = {seed_gene_dir}#Any experiment directory where the DeepRVAT seed gene discovery pipeline was run on all genes
-# phenotype = 'Triglycerides'
-# all_counts = tibble()
-# for (phenotype in list.dirs(complete_seed_gene_experiment_dir, recursive = FALSE, full.names = FALSE)){
-#   if (!grepl(".snakemake|logs", phenotype)){ 
-#     this_df = read_parquet(file.path(complete_seed_gene_experiment_dir, phenotype,'eval/burden_associations_testing.parquet')) %>%
-#       group_by(method) %>% summarise(n = n()) %>% mutate(phenotype = phenotype)
-#     all_counts = rbind(all_counts, this_df)
-#   }
-# }
-# mean_n_seed_gene_tests = all_counts %>% group_by(method) %>% summarise(mean_n_genes = mean(n))
-# mean_n_seed_gene_tests
-# n_tests_seed_genes = sum(mean_n_seed_gene_tests[['mean_n_genes']])
-n_tests_seed_genes = 53202
+### get number of considered genes per variant type after EAF filtering 
+all_counts = tibble()
+for (phenotype in list.dirs(complete_seed_gene_experiment_dir, recursive = FALSE, full.names = FALSE)){
+  if (!grepl(".snakemake|logs", phenotype)){ 
+    file_path = file.path(complete_seed_gene_experiment_dir, phenotype,'eval/burden_associations.parquet')
+    tryCatch(
+    {
+      this_df <- read_parquet(file_path) %>%
+        select(gene, method) %>% 
+        distinct() %>%
+        group_by(method) %>%
+        summarise(n = n()) %>%
+        mutate(phenotype = phenotype)
+    },
+    error = function(e) {
+      cat("Warning: The file", file_path, "does not exist.\n")
+    }
+  )
+    all_counts = rbind(all_counts, this_df)
+  }
+}
+mean_n_seed_gene_tests = all_counts %>% group_by(method) %>% summarise(mean_n_genes = mean(n))
+mean_n_seed_gene_tests
+n_tests_seed_genes = sum(mean_n_seed_gene_tests[['mean_n_genes']])
+n_tests_seed_genes
+this_df <- read_parquet(file_path) 
 ```
+
 
 
 
 ### DeepRVAT
 ```{r}
 repeats = seq(0,5,1)
-deeprvat_timing_dir =  file.path(timing_dir,'timing_deeprvat')
 
 gene_list_deeprvat = list()
 deeprvat_results = list()
@@ -225,16 +237,15 @@ length(intersect(genes_staar, genes_deeprvat))
 
 ```{r}
 deeprvat_avg = deeprvat_results %>% select(gene, full_time, score_time) %>% 
-  rename('time_test' = 'score_time') %>%
+  rename('time_test' = 'score_time', 'time_complete' = 'full_time') %>%
   group_by(gene) %>% summarise_each(funs(sum(., na.rm = TRUE)))
 deeprvat_avg
-deeprvat_results %>% filter(gene == 9)
 ```
 
 # Evaluate results
 ```{r}
 #Training and burden computation were retrieved manually
-deeprvat_train_time = 16449 
+deeprvat_train_time = 16449
 deeprvat_burden_time_with_overhead = 250
 deeprvat_burden_time = 233
 ```
@@ -265,8 +276,7 @@ seed_gene_discovery_total_time
 
 
 ```{r}
-# for (n_genes in seq(0, 20000))
-modes = c('time_test')
+modes = c('time_complete', 'time_test')
 mode = 'time_test' 
 n_genes = 100
 
@@ -275,8 +285,9 @@ getDeepRvatTimes = function(gene_avg_deeprvat, mode, n_genes){
   gene_time = gene_avg_deeprvat[[mode]]
   deeprvat_times = list()
   for (overhead_suffix in  c('', '_with_overhead')){
-    time_with_train = seed_gene_discovery_total_time[[mode]]  + deeprvat_train_time + get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time
-    time_without_train =  get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time
+    time_with_train = seed_gene_discovery_total_time[[mode]]  + deeprvat_train_time + get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time + gene_avg_seed_genes[[mode]] * n_genes
+    # time_without_train =  get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time  
+    time_without_train =  get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time  + gene_avg_seed_genes[[mode]] * n_genes
     deeprvat_times[[paste0('with_train', overhead_suffix)]] = time_with_train
     deeprvat_times[[paste0('without_train', overhead_suffix)]] = time_without_train
   }
@@ -297,7 +308,7 @@ getTimeComparison = function(gene_avg, mode, n_genes){
 ```{r}
 all_times = tibble()
 for (n_genes in seq(0, 150000, 100)){
-  for (mode in  c('time_test')){
+  for (mode in  c('time_complete', 'time_test')){
     deeprvat_times = getDeepRvatTimes(gene_avg_deeprvat, mode, n_genes)
     deeprvat_types = c(deeprvat_times$deeprvat_type)
     all_times = rbind(all_times, deeprvat_times)
@@ -327,27 +338,6 @@ deeprvat_types
 ```
 
 
-```{r}
-
-all_times %>% filter(n_genes == 0 & deeprvat_type == 'with_train')
-this_deeprvat = 'without_train'
-ggplot(all_times,
-       aes(x = n_genes, y = time, color = Method)) +
-  facet_grid(rows = vars(deeprvat_type), cols = vars(mode), scales = 'free') +
-  # facet_wrap(vars(deeprvat_type)) +
-  geom_line() +
-  scale_y_continuous(labels = scales::scientific) +
-  scale_x_continuous(labels = scales::scientific) +
-  scale_color_manual(values = plot_colors) + 
-  labs(y = 'Testing time [s]', x = 'Genes') +
-  # scale_y_log10() +
-  # scale_x_log10() +
-  theme_classic() #+
-  # theme_cowplot()
-```
-
-
-
 
 ```{r}
 
@@ -374,54 +364,48 @@ plot_df = plot_df %>% mutate(Method = ifelse(Method == 'DeepRVAT', paste(Method,
   distinct()
 
 plot_df[['Method']] = sapply(plot_df[['Method']], deeprvat_name_renamer)
-plot_df
+plot_df = plot_df %>% filter(n_genes < 150000 & time < 2e5)
+plot_df = plot_df %>% mutate(line_type = ifelse(Method != 'DeepRVAT (with training)', 'DeepRVAT (pre-trained)', 'DeepRVAT (with training)')) %>% 
+  mutate(Method = ifelse(grepl('DeepRVAT', Method), 'DeepRVAT', Method))
+```
 
+
+```{r}
 p_timing = ggplot(plot_df %>% filter(n_genes < 150000 & time < 2e5) ,
-       aes(x = n_genes, y = time, color = Method)) +
+       aes(x = n_genes, y = time, color = Method, linetype = line_type)) +
   # facet_grid(cols = vars(deeprvat_type),
   #            scales = 'free', labeller = deeprvat_type_names_labeller) +
   # facet_wrap(vars(deeprvat_type)) +
   geom_line() +
   scale_y_continuous(labels = fancy_scientific) +
-  scale_color_manual(values = plot_colors_deeprvat, guide = 'none') + 
-  labs(y = 'Testing time [s]', x = 'Tests', color = '') +
+  scale_color_manual(values = plot_colors) + 
+  labs(y = 'Testing time [s]', x = 'Tests', color = '', linetype = '') +
   theme_cowplot() +
   theme(strip.background = facet_background,
-        axis.text.x = element_text(angle = 44,  hjust =1),
-        plot.margin = my_margin,
-        aspect.ratio = 1)
+        axis.text.x = element_text(angle = 44,  hjust =1))+
+        # plot.margin = my_margin,
+        # aspect.ratio = 1
+        # ) +
+  scale_linetype_manual(values = c("solid", "dashed"), 
+                         guide = guide_legend(override.aes = list(color = plot_colors['DeepRVAT'])))
 p_timing
-```
-
-
-```{r}
-p_time_deeprvat_training = ggplot(plot_df %>% filter(Method == 'DeepRVAT (pre-trained)') ,
-       aes(x = n_genes, y = time, color = Method)) +
-  # facet_wrap(vars(deeprvat_type)) +
-  geom_line() +
-  scale_y_continuous(labels = fancy_scientific) +
-  scale_color_manual(values = plot_colors_deeprvat, guide = 'none') + 
-  labs(y = 'Testing time [s]', x = 'Genes', color = '') +
-  theme_cowplot() +
-  theme(strip.background = facet_background,
-        axis.text.x = element_text(angle = 44,  hjust =1),
-        plot.margin = my_margin)
-
-p_time_deeprvat_training
 ```
 
 
 # Testing on multiple phenotypes
 
 ```{r}
+#time per phenotype: (seed_gene_discovery + train_time) + deeprvat_gene_time * n_genes * n_phenotypes + seed_gene_avg_gene_time * n_genes * n_phenotypes
+
 getDeepRvatTimesMultiPheno = function(gene_avg_deeprvat, mode, n_genes, n_phenotypes = 100){
-  # training time with training for deeprvat: 1x training_time + 1x seed_gene_time + 1x burden_time + n_phenotypes * 20k * gene_time
-  # training time without training for deeprvat: 1x burden_time + n_phenotypes * 20k * gene_time
+  # training time with training for deeprvat: 1x training_time + 1x seed_gene_time + 1x burden_time + n_phenotypes * n_genes * gene_time_deeprvat +  n_phenotypes * n_genes * gene_time_seed
+  # training time without training for deeprvat: 1x burden_time + n_phenotypes * n_genes * gene_time_deeprvat + n_phenotypes * n_genes * gene_time_seed
   gene_time = gene_avg_deeprvat[[mode]]
   deeprvat_times = list()
   for (overhead_suffix in  c('', '_with_overhead')){
-    time_with_train = seed_gene_discovery_total_time[[mode]] + deeprvat_train_time + get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time * n_phenotypes
-    time_without_train =  get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time * n_phenotypes
+    time_with_train = seed_gene_discovery_total_time[[mode]] + deeprvat_train_time + get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time * n_phenotypes  + gene_avg_seed_genes[[mode]] * n_genes * n_phenotypes
+    # time_without_train =  get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time * n_phenotypes
+    time_without_train =  get(paste0('deeprvat_burden_time', overhead_suffix)) + n_genes * gene_time * n_phenotypes + gene_avg_seed_genes[[mode]] * n_genes * n_phenotypes
     deeprvat_times[[paste0('with_train', overhead_suffix)]] = time_with_train
     deeprvat_times[[paste0('without_train', overhead_suffix)]] = time_without_train
   }
@@ -442,8 +426,8 @@ getTimeComparisonMultipheno = function(gene_avg, mode, n_genes, n_phenotypes = 1
 ```{r}
 all_times_multipheno = tibble()
 n_genes = 20000 # considers 20k protein coding genes
-n_phenotypes = 100
-for (mode in  c('time_test')){
+n_phenotypes = 50
+for (mode in  c('time_complete', 'time_test')){
   deeprvat_times = getDeepRvatTimesMultiPheno(gene_avg_deeprvat, mode, n_genes, n_phenotypes)
   deeprvat_types = c(deeprvat_times$deeprvat_type)
   all_times_multipheno = rbind(all_times_multipheno, deeprvat_times)
@@ -457,12 +441,6 @@ for (mode in  c('time_test')){
   all_times_multipheno = rbind(all_times_multipheno, staar_time %>% mutate(deeprvat_type = type))
 }
 
-all_times_multipheno
-```
-
-```{r}
-n_phenotypes = 100
-
 
 this_df = all_times_multipheno %>% filter(grepl('overhead', deeprvat_type) &  mode == 'time_test') %>%
   mutate(Method = ifelse(Method == 'DeepRVAT', paste(Method, deeprvat_type, sep = '-'), Method)) %>%
@@ -474,8 +452,8 @@ this_df[['Method']] = sapply(this_df[['Method']], deeprvat_name_renamer)
 
 this_df_x_fold = this_df %>%
   mutate(ref_value = this_df[['time']][this_df[['Method']] == 'DeepRVAT (pre-trained)']) %>%
-  mutate(time_x = time/ref_value) %>%
-  mutate(time_x_val = paste0(as.integer(time_x), 'x'))
+  mutate(time_x = time/ref_value, time_h = round(time/(3600*24), 1)) %>%
+  mutate(time_x_val = paste0(round(time_x,0), 'x \n (', time_h, ' d)' ))
 this_df_x_fold
 
 ```
@@ -483,31 +461,52 @@ this_df_x_fold
 
 
 ```{r}
-x_fold_labeller <- function(l) {
-     # turn in to character string in scientific notation
-     l <- format(l, digits = 1)
-     # quote the part before the exponent to keep all the digits
-     l <- paste(l, 'x', sep = '')
-     # turn the 'e+' into plotmath format
-     l <- gsub("e", "%*%10^", l)
-     l <- gsub("\\+", "", l)
-     # return this as an expression
-     return(l)
-}
+n_phenotypes = 60 
+all_times_multipheno = tibble()
+n_genes = 20000 # considers 20k protein coding genes
+for (mode in  c('time_complete', 'time_test')){
+  deeprvat_times = getDeepRvatTimesMultiPheno(gene_avg_deeprvat, mode, n_genes, n_phenotypes)
+  deeprvat_types = c(deeprvat_times$deeprvat_type)
+  all_times_multipheno = rbind(all_times_multipheno, deeprvat_times)
 
-# p_pheno_x_fold = 
- p_pheno_x_fold = ggplot(this_df_x_fold %>% filter(mode == 'time_test' ) ,
+  monti_time = getTimeComparisonMultipheno(gene_avg_monti, mode, n_genes, n_phenotypes) %>%
+    mutate(Method = 'Monti')
+
+  staar_time = getTimeComparisonMultipheno(gene_avg_staar, mode, n_genes, n_phenotypes) %>%
+    mutate(Method = 'STAAR')
+  all_times_multipheno = rbind(all_times_multipheno, monti_time %>% mutate(deeprvat_type = type))
+  all_times_multipheno = rbind(all_times_multipheno, staar_time %>% mutate(deeprvat_type = type))
+}
+this_df = all_times_multipheno %>% filter(grepl('overhead', deeprvat_type) &  mode == 'time_test') %>%
+  mutate(Method = ifelse(Method == 'DeepRVAT', paste(Method, deeprvat_type, sep = '-'), Method)) %>%
+  select(-deeprvat_type) %>%
+  distinct()
+
+this_df[['Method']] = sapply(this_df[['Method']], deeprvat_name_renamer)
+
+
+this_df_x_fold = this_df %>%
+  mutate(ref_value = this_df[['time']][this_df[['Method']] == 'DeepRVAT (pre-trained)']) %>%
+  mutate(time_x = time/ref_value, time_h = round(time/(3600*24), 1)) %>%
+  mutate(time_x_val = paste0(round(time_x,0), 'x \n (', time_h, ' d)' ))
+this_df_x_fold
+
+saveRDS(this_df_x_fold,'timing_data_x_fold_60_pheno.Rds') #to use for plotting of the main figure
+```
+
+```{r}
+
+days = c(1,  4, 8, 16, 32, 64, 128)
+days_sec = days * (3600*24)
+p_pheno_x_fold = ggplot(this_df_x_fold %>% filter(mode == 'time_test' ) ,
        aes(x = Method, y = time, color = Method, fill = Method)) +
   geom_bar(stat="identity") +
   geom_line() +
-  scale_y_continuous(labels = fancy_scientific,  expand = expansion(mult = c(0,0.1))) +
   scale_color_manual(values = plot_colors_deeprvat, guide = 'none') + 
   scale_fill_manual(values = plot_colors_deeprvat, guide = 'none') + 
   geom_text(aes(label=time_x_val),vjust=-1, size = 5) + 
   labs(y = 'Testing time per 100 phenotypes [s]', x = '', color = '') +
-  # scale_y_log10(breaks = c(60, 3600,3600 *6, 3600*24 ), labels = c('1 min', '1h', '6h', '1d'), expand = expansion(add = 0)) +
-  # scale_y_continuous(breaks = c(60, 3600)) +
-  # scale_y_log10() +
+  scale_y_continuous(breaks = days_sec, labels = paste0(days, 'd'), expand = expansion(mult = c(0,0.3)))+ #, limits = c(0, max(days_sec))) +
   theme_cowplot() +
   theme(strip.background = facet_background,
         # axis.text.x = element_text(angle = 44,  hjust =1),
@@ -520,45 +519,9 @@ p_pheno_x_fold
 
 
 
-
-
-```{r}
-
- p_legend = ggplot(this_df %>% filter(mode == 'time_test' ) ,
-       aes(x = Method, y = time, color = Method, fill = Method)) +
-  geom_bar(stat="identity") +
-  geom_line() +
-  scale_y_continuous(labels = scales::scientific) +
-  scale_color_manual(values = plot_colors_deeprvat, guide = 'none') + 
-  scale_fill_manual(values = plot_colors_deeprvat) + 
-  labs(y = 'Testing time per phenotype [s]', x = '', color = '', fill = '') +
-  # scale_y_log10(breaks = c(60, 3600,3600 *6, 3600*24 ), labels = c('1 min', '1h', '6h', '1d'), expand = expansion(add = 0)) +
-  # scale_y_continuous(breaks = c(60, 3600)) +
-  # scale_y_log10() +
-  theme_cowplot() +
-  theme(strip.background = facet_background,
-        axis.text.x = element_text(angle = 44,  hjust =1),
-        legend.text = element_text(size = 16),
-        legend.position="bottom",
-        legend.title = element_blank(),
-        legend.box.margin = margin(0,0,0,1)) +
-  guides(fill = guide_legend(nrow = 2))
-
-
-
-g_legend<-function(a.gplot){
-  tmp <- ggplot_gtable(ggplot_build(a.gplot))
-  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
-  legend <- tmp$grobs[[leg]]
-  return(legend)}
-
-mylegend<-g_legend(p_legend)
-mylegend
-```
 ## Get training times
 ```{r}
-# training times were measured externally
-training_time_deeprvat <- read_parquet("../data/deeprvat_training_data.parquet")
+training_time_deeprvat <- read_parquet(deeprvat_train_time_res)
 training_time_deeprvat
 ```
 
@@ -568,29 +531,19 @@ p_training_time = ggplot(training_time_deeprvat, aes(x = Individuals, y =`Traini
   geom_point() +
   geom_smooth(method = "lm") + 
   theme_cowplot() +
-  labs(y = 'Training time [s]', x = 'Individuals') +
-  theme(aspect.ratio = 1,plot.margin = my_margin)
+  labs(y = 'Training time [s]', x = 'Individuals') #+
+  # theme(aspect.ratio = 1,plot.margin = my_margin)
 p_training_time
 ```
 
 
 
+
 ```{r}
-lay = rbind(
-            c(1,NA, 2),
-            c(1,NA, 2),
-            c(3,NA, 2),
-            c(3,4, 4))
-plot_width = 25
-label_default_size = 14 #default ggarrange size
-default_plot_width = 15.5 #used by brian
-gt = grid.arrange(grobs= list(p_training_time, p_pheno_x_fold, p_timing,  mylegend), layout_matrix = lay, nrow = 4, ncol = 3, widths = c(0.65, 0.02, 0.45), heigts = c(1,1,1,1))
-p = as_ggplot(gt) +                                # transform to a ggplot
-  draw_plot_label(label = c("a", "c", "b"), size = plot_width/default_plot_width * label_default_size ,
-                  x = c(0, 0.55,0), y = c(1, 1, 0.55)) # Add labels
-
-ggsave(file.path(plot_out_path, 'fig_3_supp_timing.png'),p,  width = plot_width, height = 20, unit = 'cm')
-
+ggarrange(p_training_time, p_timing, nrow = 1, align = 'h',
+          widths = c(0.4, 0.6), labels = c('a', 'b'), 
+          font.label = list(size = 20, color = "black", face = "bold", family = NULL)
+)
 ```
 
 

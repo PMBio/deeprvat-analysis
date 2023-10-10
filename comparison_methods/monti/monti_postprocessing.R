@@ -61,6 +61,8 @@ for (pval_name in names(pval_cols)) {
     # set column that you want to use as pvals
     this_test_results = test_results %>%
         mutate(`:=`(pval, !!as.name(pval_col)))
+    this_test_results[[pval_col]][this_test_results[[pval_col]] >= 1] = 0.99
+    this_test_results[['pval']][this_test_results[['pval']] >= 1] = 0.99
 
     cct_combined_pvals = cct_combine_pvals(test_results = this_test_results, cct_vtypes = cct_vtypes)
 

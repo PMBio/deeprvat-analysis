@@ -307,11 +307,17 @@ def build_data(
     ]
     annotation_df = dataset.annotation_df.query("id in @all_variants")
     annotation_df = annotation_df[["gene_ids"] + annotation_cols]
+    # exploded_annotations = (
+    #     dataset.annotation_df.query("id in @all_variants")
+    #     .explode("gene_ids")
+    #     .drop_duplicates()
+    # )  # row can be duplicated if a variant is assigned to a gene multiple times
     exploded_annotations = (
         dataset.annotation_df.query("id in @all_variants")
-        .explode("gene_ids")
+        .explode('gene_ids').reset_index()
         .drop_duplicates()
-    )  # row can be duplicated if a variant is assigned to a gene multiple times
+        .set_index('id')
+    )  
     grouped_annotations = exploded_annotations.groupby("gene_ids")
     gene_ids = pd.read_parquet(dataset.gene_file, columns=["id"])["id"].to_list()
     gene_ids = list(
