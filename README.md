@@ -5,7 +5,6 @@ To run the code, the DeepRVAT conda environment is needed and DeepRVAT has to be
 
 The UK Biobank genotype and phenotype data required to run all the analyses presented here is not publicly available. We therefore describe for each experiment the required input data/experiment folder set-up in the corresponding README. For detailed information on the input data, the documentation of the [DeepRVAT](https://github.com/PMBio/deeprvat/) repository should be checked. 
 
-All markdowns to generate the main paper figures can be found in `paper_figures`
 
 The following environment variables need to be exported when using any pipeline in this repository:
 - `DEEPRVAT_ANALYSIS_DIR={path_to_this_repository}`
