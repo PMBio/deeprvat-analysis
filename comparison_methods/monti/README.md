@@ -47,5 +47,5 @@ In addition, `amino_acid_variant_map.parquet` is required, which has the followi
 - `Protein_position`: Specifies variant position in a protein (e.g., 3/100 denotes the variant at the 3rd amino acid out of 100). Any string/number can be used as long as variants in the same amino acid for a gene share a unique Protein_position. This is used to aggregate variants at the amino acid level
 
 ## Running the pipeline
-From your experiemnt directory, then run `snakemake {this_directoy_path}/monti.snakefile --use-conda' and any other flags you might need.
+From your experiment directories (`experiments/monti`/`experiments/mont_binary`), then run `snakemake {this_directoy_path}/monti.snakefile --use-conda' and any other flags you might need.
 The pipeline requires an r environment (see environment file). The environment name has to be changed accordingly in `monti.snakefile` (currently `r-env`)

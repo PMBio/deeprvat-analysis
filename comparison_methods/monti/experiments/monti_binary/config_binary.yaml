@@ -1,25 +1,30 @@
 phenotypes:
-    # - Apolipoprotein_A
-    # - Apolipoprotein_B
-    # - Calcium
-    # - Cholesterol
-    # - HDL_cholesterol
-    # - IGF_1
-    # - LDL_direct
-    # - SHBG
-    # - Total_bilirubin
-    - Triglycerides
-    # - Urate
-    # - Standing_height
-    # - Lymphocyte_percentage
-    # - Mean_platelet_thrombocyte_volume
-    # - Mean_corpuscular_volume
-    # - Mean_reticulocyte_volume
-    # - Neutrophill_count
-    # - Platelet_count
-    # - Platelet_crit
-    # - Platelet_distribution_width
-    # - Red_blood_cell_erythrocyte_count
+  - Jurgens_Hypertension 
+  - Jurgens_Hypercholesterolemia 
+  - Jurgens_Osteoarthritis 
+  - Jurgens_Asthma
+  - Jurgens_Gastroesophageal_reflux_disease
+  - Jurgens_Diverticular_disease
+  - Jurgens_Depression 
+  - Jurgens_Cataract 
+  - Jurgens_Allergic_rhinitis 
+  - Jurgens_Hypothyroidism 
+  - Jurgens_Diabetes_Type_2 
+  - Jurgens_Skin_cancer
+  - Jurgens_Back_pain
+  - Jurgens_Cholelithiasis 
+  - Jurgens_Pneumonia
+  - Jurgens_Atrial_fibrillation 
+  - Jurgens_Coronary_Artery_Disease
+  - Jurgens_Migraine
+  - Jurgens_Dermatitis 
+  - Jurgens_Irritable_bowel_syndrome 
+  - Jurgens_Chronic_obstructive_pulmonary_disease 
+  - Jurgens_Venous_thromboembolism 
+  - Jurgens_Breast_cancer 
+  - Jurgens_Osteoporosis 
+  - Jurgens_Myocardial_infarction 
+  - Jurgens_Stroke
 
 
 variant_types:
@@ -58,9 +63,8 @@ data:
         variant_file: variants.parquet
         phenotype_file: phenotypes.parquet
         standardize_xpheno: False
-        y_transformation: quantile_transform
         min_common_af:
-            combined_UKB_NFE_AF: 0.001 #is updated automatically when updating the config with update_config
+            MAF: 0.001 #is updated automatically when updating the config with update_config
         x_phenotypes:
             - age
             - genetic_sex
@@ -88,12 +92,12 @@ data:
         annotations:
             - chrom
             - pos
-            - combined_UKB_NFE_AF
+            - MAF
             - is_plof
             - Consequence_missense_variant
             - polyphen_score
             - sift_score
-        gene_file: genes.parquet
+        gene_file: protein_coding_genes.parquet
         use_common_variants: False
         use_rare_variants: True
         rare_embedding:
@@ -102,12 +106,12 @@ data:
                 annotations:
                     - chrom
                     - pos
-                    - combined_UKB_NFE_AF
+                    - MAF
                     - is_plof
                     - Consequence_missense_variant
                     - polyphen_score
                     - sift_score
-                gene_file: genes.parquet
+                gene_file: protein_coding_genes.parquet
                 verbose: True
         verbose: True
     dataloader_config:
