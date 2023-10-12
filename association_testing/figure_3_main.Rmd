@@ -27,12 +27,12 @@ pheno_choice = 'all_phenotypes'
 # Define experiment directories
 ```{r}
 ## define directories
-monti_res_binary_dir = 'monti_binary'
-staar_res_binary_dir = 'staar_binary'
-monti_quant_dir = 'monti'
-staar_quant_dir = 'staar'
+monti_res_binary_dir = '../comparison_methods/monti/experiments/monti_binary'
+staar_res_binary_dir = '../comparison_methods/staar/experiments/staar_binary'
+monti_quant_dir = '../comparison_methods/monti/experiments/monti'
+staar_quant_dir = '../comparison_methods/staar/experiments/staar'
 results_dir = 'paper_experiment' #deeprvat quantitative
-results_deeprvat_binary_dir = 'deeprvat_binary'
+results_deeprvat_binary_dir = 'deeprvat_pretrained_binary'
 timing_data_dir = '../timing/' #timing.Rmd has to be run before executing this markdown
 ```
 
