@@ -10,20 +10,18 @@ library(gridExtra)
 
 ```
 
-Timing experiments were run using the pipelines in the DeepRVAT repo for DeepRVAT and the baselines/seed gene discovery. For STAAR and Monti et al. the pipelines in this directory can be used. 
-The gene file should be replaced by data/timing_genes.parquet which comprises 1000 randomly chosen genes. 
+The gene file timing_genes.parquet  comprises 1000 randomly chosen genes. 
 For the timing experiments, the number of regression chunks was set to 1 in all snakefiles. 
 The timing experiments were only run for a single phenotype (Triglycerides)
 
 ```{r}
-## define directories here and comment out the sourcing 
-source(timing_paths.R)
-# timing_dir_staar = ...
-# timing_dir_monti = ...
-# timing_dir_seed_genes = ...
-# complete_seed_gene_experiment_dir = ...
-# deeprvat_train_time_res = ...
-# deeprvat_timing_dir = ...
+## define directories here 
+timing_dir_staar = 'timing_staar'
+timing_dir_monti = 'timing_mont'
+timing_dir_seed_genes = 'timing_burden_skat'
+complete_seed_gene_experiment_dir = '../association_testing/burden_skat'
+deeprvat_train_time_res = 'timing_results.parquet'
+deeprvat_timing_dir = 'timing_deeprvat'
 
 ```
 
@@ -244,7 +242,7 @@ deeprvat_avg
 
 # Evaluate results
 ```{r}
-#Training and burden computation were retrieved manually
+#Training and burden computation were retrieved manually from log files of training jobs and burden computation jobs 
 deeprvat_train_time = 16449
 deeprvat_burden_time_with_overhead = 250
 deeprvat_burden_time = 233
@@ -260,15 +258,21 @@ n_training_phenotypes = 21
 
 gene_avg_staar = colMeans(avg_staar %>% filter(gene %in% genes_to_keep) %>%
                           select(-gene))
+print('STAAR')
 gene_avg_staar
 
 gene_avg_monti = colMeans(avg_monti %>% filter(gene %in% genes_to_keep) %>% select(-gene))
+
+print('Monti')
 gene_avg_monti
 
 gene_avg_deeprvat = colMeans(deeprvat_avg %>% filter(gene %in% genes_to_keep) %>% select(-gene))
+
+print('DeepRVAT')
 gene_avg_deeprvat
 
 gene_avg_seed_genes = colMeans(avg_seed_genes %>% filter(gene %in% genes_to_keep) %>% select(-gene))
+print('Baseline Burden/SKAT')
 gene_avg_seed_genes
 seed_gene_discovery_total_time =  n_tests_seed_genes * gene_avg_seed_genes * n_training_phenotypes
 seed_gene_discovery_total_time
@@ -492,6 +496,7 @@ this_df_x_fold = this_df %>%
 this_df_x_fold
 
 saveRDS(this_df_x_fold,'timing_data_x_fold_60_pheno.Rds') #to use for plotting of the main figure
+
 ```
 
 ```{r}

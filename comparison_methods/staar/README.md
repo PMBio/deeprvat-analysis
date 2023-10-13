@@ -54,7 +54,7 @@ Also, to build the variant filter masks, the following columns have to be provid
 
 
 ## Running the pipeline
-From your experiemnt directory, then run `snakemake {this_directoy_path}/staar.snakefile --use-conda' and any other flags you might need.
+From the experiment directories (`experiments/staar`/`experiments/binary`), then run `snakemake {this_directoy_path}/staar.snakefile --use-conda' and any other flags you might need.
 The pipeline requires an R environment (see `r-env.yaml` file). Also, STAAR has to be installed 
 `library(devtools)`
 `devtools::install_github("xihaoli/STAAR")`

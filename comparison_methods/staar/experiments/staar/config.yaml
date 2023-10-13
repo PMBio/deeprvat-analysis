@@ -1,0 +1,139 @@
+phenotypes:
+  - Apolipoprotein_A
+  - Apolipoprotein_B
+  - Calcium
+  - Cholesterol
+  - HDL_cholesterol
+  - IGF_1
+  - LDL_direct
+  - SHBG
+  - Total_bilirubin
+  - Triglycerides
+  - Urate
+  - Standing_height
+  - Lymphocyte_percentage
+  - Mean_platelet_thrombocyte_volume
+  - Mean_corpuscular_volume
+  - Mean_reticulocyte_volume
+  - Neutrophill_count
+  - Platelet_count
+  - Platelet_crit
+  - Platelet_distribution_width
+  - Red_blood_cell_erythrocyte_count
+  - Body_mass_index_BMI
+  - Glucose
+  - Vitamin_D
+  - Albumin
+  - Total_protein
+  - Cystatin_C
+  - Gamma_glutamyltransferase
+  - Alkaline_phosphatase
+  - Creatinine
+  - Whole_body_fat_free_mass 
+  - Forced_expiratory_volume_in_1_second_FEV1
+  - Glycated_haemoglobin_HbA1c
+  - WHR_Body_mass_index_BMI_corrected
+
+
+alpha: 0.05
+
+
+
+data:
+    gt_file: genotypes.h5
+    dataset_config:
+        variant_file: variants.parquet
+        phenotype_file: phenotypes.parquet
+        standardize_xpheno: False
+        y_transformation: quantile_transform
+        min_common_af:
+            MAF: 0.001 #is updated automatically when updating the config with update_config
+        x_phenotypes:
+            - age
+            - genetic_sex
+            - genetic_PC_1
+            - genetic_PC_2
+            - genetic_PC_3
+            - genetic_PC_4
+            - genetic_PC_5
+            - genetic_PC_6
+            - genetic_PC_7
+            - genetic_PC_8
+            - genetic_PC_9
+            - genetic_PC_10
+            - genetic_PC_11
+            - genetic_PC_12
+            - genetic_PC_13
+            - genetic_PC_14
+            - genetic_PC_15
+            - genetic_PC_16
+            - genetic_PC_17
+            - genetic_PC_18
+            - genetic_PC_19
+            - genetic_PC_20
+        annotation_file: annotations.parquet
+        annotations:
+            - MAF
+            - CADD_PHRED
+            - sift_score_PHRED
+            - polyphen_score_PHRED
+            - condel_score_PHRED
+            - DeepSEA_PC_1_PHRED
+            - DeepSEA_PC_2_PHRED
+            - DeepSEA_PC_3_PHRED
+            - DeepSEA_PC_4_PHRED
+            - DeepSEA_PC_5_PHRED
+            - DeepSEA_PC_6_PHRED
+            - PrimateAI_score_PHRED
+            - AbSplice_DNA_PHRED
+            - DeepRipe_plus_QKI_lip_hg2_PHRED
+            - DeepRipe_plus_QKI_clip_k5_PHRED
+            - DeepRipe_plus_KHDRBS1_clip_k5_PHRED
+            - DeepRipe_plus_ELAVL1_parclip_PHRED
+            - DeepRipe_plus_TARDBP_parclip_PHRED
+            - DeepRipe_plus_HNRNPD_parclip_PHRED
+            - DeepRipe_plus_MBNL1_parclip_PHRED
+            - DeepRipe_plus_QKI_parclip_PHRED
+            - SpliceAI_delta_score_PHRED      
+            - is_plof # from here on annotations for masking
+            - disruptive_missense
+            - plof_or_disruptive_missense
+            - Consequence_synonymous_variant
+            - Consequence_missense_variant
+        gene_file: protein_coding_genes.parquet
+        use_common_variants: False
+        use_rare_variants: True
+        rare_embedding:
+            type: SparseGenotype
+            config:
+                annotations:
+                    - CADD_PHRED
+                    - sift_score_PHRED
+                    - polyphen_score_PHRED
+                    - condel_score_PHRED
+                    - DeepSEA_PC_1_PHRED
+                    - DeepSEA_PC_2_PHRED
+                    - DeepSEA_PC_3_PHRED
+                    - DeepSEA_PC_4_PHRED
+                    - DeepSEA_PC_5_PHRED
+                    - DeepSEA_PC_6_PHRED
+                    - PrimateAI_score_PHRED
+                    - AbSplice_DNA_PHRED
+                    - DeepRipe_plus_QKI_lip_hg2_PHRED
+                    - DeepRipe_plus_QKI_clip_k5_PHRED
+                    - DeepRipe_plus_KHDRBS1_clip_k5_PHRED
+                    - DeepRipe_plus_ELAVL1_parclip_PHRED
+                    - DeepRipe_plus_TARDBP_parclip_PHRED
+                    - DeepRipe_plus_HNRNPD_parclip_PHRED
+                    - DeepRipe_plus_MBNL1_parclip_PHRED
+                    - DeepRipe_plus_QKI_parclip_PHRED
+                    - SpliceAI_delta_score_PHRED  
+                thresholds:
+                    MAF: "MAF < 1e-3 and MAF > 0"
+                gene_file: protein_coding_genes.parquet
+                verbose: True
+        verbose: True
+    dataloader_config:
+        num_workers: 10
+        #batch_size: 20
+
