@@ -62,7 +62,7 @@ def seed_gene_selection(
     sg_remove_dict = {pheno: remove_quantity[:,col] for col, pheno in enumerate(resample_phenos)}
 
     reassign = {fold: 0 for fold in range(folds)}
-    locked_phenos = [] 
+    locked_phenos = {fold: [] for fold in range(folds)} 
     for fold in range(folds):
         for pheno in resample_phenos: 
             up_bound = math.floor((1-min_keep_percent)*sg_dict[pheno])
@@ -74,14 +74,14 @@ def seed_gene_selection(
                     sg_remove_dict[pheno][fold] -= 1
                     reassign[fold] += 1
 
-                locked_phenos.append(pheno)
+                locked_phenos[fold].append(pheno)
     
     #Randomly reassign the errored knockouts to other phenotypes
-    rng.shuffle(resample_phenos)
     for fold in range(folds):
+        rng.shuffle(resample_phenos)
         while reassign[fold] > 0:
             for pheno in resample_phenos:
-                if pheno not in locked_phenos:
+                if pheno not in locked_phenos[fold]:
                     
                     up_bound = math.floor((1-min_keep_percent)*sg_dict[pheno])
                     min_count = sg_dict[pheno] - min_seed_genes 
@@ -94,9 +94,9 @@ def seed_gene_selection(
                             break
                     
                     if sg_remove_dict[pheno][fold] == min(up_bound, min_count) :
-                        locked_phenos.append(pheno)
+                        locked_phenos[fold].append(pheno)
 
-            if (({*resample_phenos} & {*locked_phenos}) == {*resample_phenos} ) and (reassign[fold] > 0):  
+            if (({*resample_phenos} & {*locked_phenos[fold]}) == {*resample_phenos} ) and (reassign[fold] > 0):  
                 #if all phenos are now locked and there are still genes to knockout
                 logger.info(f"   Too high kept amount [{min_keep_percent*100}%] in combination with too high downsample amount [{downsample_percent*100}%]")
                 logger.info(f"   Could not distribute all portion of genes to be knocked out.")
