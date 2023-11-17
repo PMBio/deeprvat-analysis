@@ -21,17 +21,19 @@ logger = logging.getLogger(__name__)
 @click.option("--folds", type=int, default= 0)
 @click.option("--downsample_percent", type=float, default= 0.1, help="Percentage of total seed genes to remove")
 @click.option("--min_keep_percent", type=float, default= 0.5, help="At least this percentage of seed genes per phenotype must be kept")
+@click.option("--min_seed_genes", type=int, default= 4)
 def seed_gene_selection(
     base_config: str,
     seed_gene_file: Optional[str],
     folds: int,
     downsample_percent: float, 
     min_keep_percent: float, 
+    min_seed_genes: int,
 ):
     logger.info(f"Downsampling Seed Gene Selection")
     rng = np.random.default_rng(seed=42)
 
-    assert min_keep_percent > downsample_percent ##
+    assert (1-min_keep_percent) > downsample_percent
     
     sg_dict = {}
     total_seed_genes = 0
@@ -45,7 +47,7 @@ def seed_gene_selection(
     for pheno in phenotypes:
         seed_gene_df = pd.read_parquet(f'./base/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow")
         sg_dict[pheno] = len(seed_gene_df)
-        if sg_dict[pheno] <= 4:
+        if sg_dict[pheno] <= min_seed_genes:
             logger.info(f"  Too few seed genes. Keeping all seed genes for {pheno}. Number of seed genes = {sg_dict[pheno]}")
         else: 
             resample_phenos.append(pheno)
@@ -62,10 +64,12 @@ def seed_gene_selection(
     reassign = {fold: 0 for fold in range(folds)}
     locked_phenos = [] 
     for fold in range(folds):
-        for pheno in resample_phenos: # = remove_quantity.shape[1]:
+        for pheno in resample_phenos: 
             up_bound = math.floor((1-min_keep_percent)*sg_dict[pheno])
-            if sg_remove_dict[pheno][fold] > up_bound:
-                while sg_remove_dict[pheno][fold] > up_bound:
+            min_count = sg_dict[pheno] - min_seed_genes 
+
+            if sg_remove_dict[pheno][fold] > min(up_bound, min_count):
+                while sg_remove_dict[pheno][fold] > min(up_bound, min_count):  
                     logger.info(f"  Check 1 : Selected too many genes to remove from {pheno}. Reducing by 1 and trying again.")
                     sg_remove_dict[pheno][fold] -= 1
                     reassign[fold] += 1
@@ -78,14 +82,18 @@ def seed_gene_selection(
         while reassign[fold] > 0:
             for pheno in resample_phenos:
                 if pheno not in locked_phenos:
+                    
                     up_bound = math.floor((1-min_keep_percent)*sg_dict[pheno])
-                    if sg_remove_dict[pheno][fold] < up_bound:
+                    min_count = sg_dict[pheno] - min_seed_genes 
+                    
+                    if sg_remove_dict[pheno][fold] < min(up_bound, min_count): 
                         print(f"  Check 2: Reassigning genes to {pheno} - {fold}.")
                         sg_remove_dict[pheno][fold] += 1
                         reassign[fold] -= 1
                         if reassign[fold] == 0:
                             break
-                    if sg_remove_dict[pheno][fold] == up_bound:
+                    
+                    if sg_remove_dict[pheno][fold] == min(up_bound, min_count) :
                         locked_phenos.append(pheno)
 
             if (({*resample_phenos} & {*locked_phenos}) == {*resample_phenos} ) and (reassign[fold] > 0):  
