@@ -16,14 +16,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 @click.command()
-@click.option("--base_config", type=click.Path(exists=True), default="./base/config.yaml")
+@click.option("--base_dir", type=click.Path(exists=True), default="./base")
 @click.option("--seed_gene_file", type=str, default="seed_genes.parquet")
 @click.option("--folds", type=int, default= 0)
 @click.option("--downsample_percent", type=float, default= 0.1, help="Percentage of total seed genes to remove")
 @click.option("--min_keep_percent", type=float, default= 0.5, help="At least this percentage of seed genes per phenotype must be kept")
 @click.option("--min_seed_genes", type=int, default= 4)
 def seed_gene_selection(
-    base_config: str,
+    base_dir: str,
     seed_gene_file: Optional[str],
     folds: int,
     downsample_percent: float, 
@@ -39,13 +39,13 @@ def seed_gene_selection(
     total_seed_genes = 0
     resample_phenos = []
 
-    with open(base_config) as f:
+    with open(f'./{base_dir}/config.yaml') as f:
         config = yaml.safe_load(f)
     
     phenotypes = config["phenotypes"]
     
     for pheno in phenotypes:
-        seed_gene_df = pd.read_parquet(f'./base/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow")
+        seed_gene_df = pd.read_parquet(f'./{base_dir}/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow")
         sg_dict[pheno] = len(seed_gene_df)
         if sg_dict[pheno] <= min_seed_genes:
             logger.info(f"  Too few seed genes. Keeping all seed genes for {pheno}. Number of seed genes = {sg_dict[pheno]}")
@@ -105,7 +105,10 @@ def seed_gene_selection(
 
     #Select seed genes for each fold and save as new parquet file
     for pheno in phenotypes:
-        seed_gene_df = pd.read_parquet(f'./base/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow")
+        seed_gene_df = pd.read_parquet(f'./{base_dir}/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow")
+
+        with open(f'./{base_dir}/{pheno}/deeprvat/hpopt_config.yaml') as f:
+            baseconfig = yaml.safe_load(f)
 
         for fold in range(folds):
             if (pheno not in resample_phenos) or (sg_remove_dict[pheno][fold] == 0):
@@ -118,12 +121,12 @@ def seed_gene_selection(
                 logger.info(f"     Removing {sg_remove_dict[pheno][fold]} seed genes from {pheno} for Fold {fold}.")
                 logger.info(f"     Resulting number of seed genes = {len(seed_gene_new_df)}")
                 seed_gene_new_df.to_parquet(f"./fold_{fold}/{pheno}/deeprvat/seed_genes.parquet", engine="pyarrow")
-
+                logger.info(f"     Fold {fold} - {pheno}: Saved seed_gene.parquet")
                 del seed_gene_new_df
 
-            config["seed_gene_file"] = f"{pheno}/deeprvat/seed_genes.parquet"
+            #baseconfig["seed_gene_file"] = f"{pheno}/deeprvat/seed_genes.parquet"
             with open(f'./fold_{fold}/{pheno}/deeprvat/hpopt_config.yaml', "w") as f:
-                yaml.dump(config, f)
+                yaml.dump(baseconfig, f)
             
         del seed_gene_df
 
