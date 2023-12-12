@@ -1,0 +1,319 @@
+---
+title: "DeepRVAT - RVAT figures"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+Load libraries
+
+```{r}
+library(ggplot2)
+library(arrow)
+library(dplyr)
+library(stringr)
+library(tidyr)
+#library(ggpubr)
+```
+
+Metadata
+
+```{r}
+phenotypes <- c(
+  "Apolipoprotein_A",
+  "Apolipoprotein_B",
+  "Calcium",
+  "Cholesterol",
+  "HDL_cholesterol",
+  "IGF_1",
+  "LDL_direct",
+  "Lymphocyte_percentage",
+  "Mean_corpuscular_volume",
+  "Mean_platelet_thrombocyte_volume",
+  "Mean_reticulocyte_volume",
+  "Neutrophill_count",
+  "Platelet_count",
+  "Platelet_crit",
+  "Platelet_distribution_width",
+  "Red_blood_cell_erythrocyte_count",
+  "SHBG",
+  "Standing_height",
+  "Total_bilirubin",
+  "Triglycerides",
+  "Urate"
+  )
+```
+
+Load DeepRVAT results
+
+```{r}
+exp_name = 'exp_dir/fold_0'
+results_dir <- file.path("~/path/to/exp_results", exp_name)
+#dir.create(file.path(exp_name), recursive = TRUE)
+
+results_list <- list()
+for (p in phenotypes) {
+  results_list[[p]] <- read_parquet(file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet"))
+}
+
+results <- bind_rows(results_list) %>%
+  rename(Trait = phenotype) 
+results
+
+significant <- results %>%
+  filter(significant) %>%
+  distinct(Trait, Method, gene, .keep_all = TRUE)
+significant
+
+counts <- bind_rows(
+  significant %>% mutate(is_single_trait = "True"),
+  significant %>% mutate(Trait = "All traits", is_single_trait = "False")
+) %>%
+ mutate(
+    Trait = case_match(
+      Trait,
+      "IGF 1" ~ "IGF-1",
+      "Mean platelet thrombocyte volume" ~ "MPTV",
+      "Red blood cell erythrocyte count" ~ "Erythrocyte count",
+      .default = Trait
+      )
+  ) %>%
+  mutate(
+    Method = factor(Method),
+    Trait = factor(Trait)
+      ) %>%
+  count(Trait, Method, is_single_trait, .drop = FALSE)
+counts[is.na(counts$is_single_trait), "is_single_trait"] <- "True"
+counts
+```
+
+Load Monti et al. results
+
+```{r}
+replication_monti_reimplemented <- readRDS("~/path/to/results/replication_monti_reimplemented.Rds") %>%
+  filter(exp_name == "Monti-Rep Quantile-transformed") %>%
+  mutate(Method = 'Monti et al.') 
+
+counts_monti = replication_monti_reimplemented %>% 
+  group_by(Trait, Method) %>% summarise(n = sum(Significant)) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True'))
+counts_monti 
+```
+
+Load STAAR results
+
+```{r}
+replication_staar = readRDS('~/path/to/results/staar/replication_staar.Rds') %>% mutate(Method = 'STAAR')
+replication_staar$Trait <- str_replace(replication_staar$Trait, "All Traits",  'All traits')
+replication_staar$Trait <- str_replace(replication_staar$Trait, "Mean platelet thrombocyte volume",  'MPTVS')
+
+counts_staar = replication_staar %>% 
+  group_by(Trait, Method) %>% summarise(n = sum(Significant)) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) 
+ counts_staar
+ 
+ counts_staar %>% distinct(Trait)
+```
+
+Combine results
+
+```{r}
+methods <- c('Burden pLOF', 'Burden missense', 'SKAT pLOF', 'SKAT missense', 'Burden/SKAT combined', "Monti et al.", "STAAR", 'DeepRVAT')
+
+counts = rbind(counts, counts_monti, counts_staar) %>%
+  mutate(Method = factor(Method, levels=methods)) %>%
+  mutate(Trait = case_match(
+    Trait,
+    "MPTVS" ~ "MPTV",
+    .default = Trait
+  ))
+
+counts %>% filter(Trait == "All traits")
+counts %>% filter(Trait != "All traits")
+levels(counts$Method)
+
+counts %>% pivot_wider(names_from = Method, values_from = n)
+```
+
+ggplot2 theme
+
+```{r}
+colors <- c('#c6dbef', '#9ecae1', '#6baed6', '#3182bd', '#08519c', "aquamarine4", '#E6AB02', '#7A2961')
+
+font_size <- 8
+font_family <- "Helvetica"
+plot_font <- element_text(size = font_size, family = font_family)
+
+base_theme <- theme(
+    text = element_text(size = font_size, family = font_family),
+    axis.text = element_text(size = font_size, family = font_family),
+    axis.title = element_text(size = font_size + 2, family = font_family),
+
+    strip.text.x = element_blank(),
+    strip.text.y = element_blank(),
+    
+    legend.title=element_blank(),
+    
+    panel.background = element_rect(fill='transparent'), #transparent panel bg
+    plot.background = element_rect(fill='transparent', color=NA, linewidth = 0), #transparent plot bg
+    legend.background = element_rect(fill='transparent'), #transparent legend bg
+    legend.box.background = element_rect(fill='transparent', color=NA), #transparent legend panel
+)
+```
+
+Order traits
+
+```{r}
+traits <- sort(unique(counts$Trait))
+
+counts <- counts %>% 
+  mutate(Trait = factor(Trait, levels = rev(traits))) %>%
+  mutate(grid_column = (21 - as.integer(Trait)) %/% 7)
+```
+
+Fig. 3b
+
+```{r}
+#Need to load this library after running "Load DeepRVAT Results" section, due to package incongruence
+library(matrixStats)
+
+replication_dir = file.path("~/path/to/exp_dir", exp_name)
+replicationf0 <- read_parquet(file.path("replication_dir/fold_0", "replication.parquet"))
+replicationf1 <- read_parquet(file.path("replication_dir/fold_1", "replication.parquet"))
+replicationf2 <- read_parquet(file.path("replication_dir/fold_2", "replication.parquet"))
+replicationf3 <- read_parquet(file.path("replication_dir/fold_3", "replication.parquet"))
+replicationf4 <- read_parquet(file.path("replication_dir/fold_4", "replication.parquet"))
+
+replicationf0 <- replicationf0 %>% 
+  filter(pheno_grouping == "all_phenotypes")
+replicationf1 <- replicationf1 %>% 
+  filter(pheno_grouping == "all_phenotypes")
+replicationf2 <- replicationf2 %>% 
+  filter(pheno_grouping == "all_phenotypes")
+replicationf3 <- replicationf3 %>% 
+  filter(pheno_grouping == "all_phenotypes")
+replicationf4 <- replicationf4 %>% 
+  filter(pheno_grouping == "all_phenotypes")
+
+
+replication_monti_reimplemented_all_traits <- replication_monti_reimplemented %>%
+  filter(Trait == "All traits") %>%
+  rename(`Gene rank` = Rank, `Replicated genes` = Replicated)
+replication_monti_reimplemented_all_traits
+
+replication_staar_all_traits =  replication_staar %>% 
+  filter(Trait == 'All traits') %>% 
+  rename(`Gene rank` = Rank, `Replicated genes` = Replicated)
+replication_staar_all_traits
+
+
+replicationfolds <- replicationf0 %>%
+  bind_cols(replicated_genes_f0 = replicationf0['Replicated genes'],
+            replicated_genes_f1 = replicationf1['Replicated genes'],
+            replicated_genes_f2 = replicationf2['Replicated genes'],
+            replicated_genes_f3 = replicationf3['Replicated genes'],
+            replicated_genes_f4 = replicationf4['Replicated genes'])
+
+replicationfolds <- replicationfolds %>% 
+  rename(
+    "repgenes_old_f0" = "Replicated genes...2",
+    "repgenes_f0" = "Replicated genes...12",
+    "repgenes_f1" = "Replicated genes...13",
+    "repgenes_f2" = "Replicated genes...14",
+    "repgenes_f3" = "Replicated genes...15",
+    "repgenes_f4" = "Replicated genes...16",
+    )
+
+f_names = c("repgenes_f0","repgenes_f1","repgenes_f2","repgenes_f3","repgenes_f4")
+
+total_sig_genes <- replicationf0 %>% filter(as.logical(Significant)) %>% summarize(`max_generank` = max(`Gene rank`), `max_repgenes` = max(`Replicated genes`))
+total_sig_genes <- rbind(
+  replicationf1 %>% filter(as.logical(Significant)) %>% summarize(`max_generank` = max(`Gene rank`), `max_repgenes` = max(`Replicated genes`)),
+  total_sig_genes)
+total_sig_genes <- rbind(
+  replicationf2 %>% filter(as.logical(Significant)) %>% summarize(`max_generank` = max(`Gene rank`), `max_repgenes` = max(`Replicated genes`)),
+  total_sig_genes)
+total_sig_genes <- rbind(
+  replicationf3 %>% filter(as.logical(Significant)) %>% summarize(`max_generank` = max(`Gene rank`), `max_repgenes` = max(`Replicated genes`)),
+  total_sig_genes)
+total_sig_genes <- rbind(
+  replicationf4 %>% filter(as.logical(Significant)) %>% summarize(`max_generank` = max(`Gene rank`), `max_repgenes` = max(`Replicated genes`)),
+  total_sig_genes)
+
+total_sig_genes$`mean_generank` = round(colMeans(total_sig_genes["max_generank"]),0)
+total_sig_genes$`mean_repgenes` = colMeans(total_sig_genes["max_repgenes"])
+
+#Change Significant genes column to be True until the mean gene rank value across folds
+all_genes = replicationfolds[replicationfolds$Method == "DeepRVAT","Gene rank"]
+sig_genes_folds <- (all_genes <= total_sig_genes$mean_generank[1])
+replicationfolds[replicationfolds$Method == "DeepRVAT","Significant"] <- sig_genes_folds
+
+replicationfolds$`Replicated genes` = rowMeans(replicationfolds[,f_names])
+replicationfolds$replicated_genes_std = rowSds(as.matrix(replicationfolds[,f_names]))
+replicationfolds["ymin"] = replicationfolds["Replicated genes"] - replicationfolds['replicated_genes_std']
+replicationfolds["ymax"] = replicationfolds["Replicated genes"] + replicationfolds['replicated_genes_std']
+
+replication <- bind_rows(replicationfolds, replication_monti_reimplemented_all_traits, replication_staar_all_traits)
+replication
+
+replication_full <- bind_rows(
+  replication,
+  replication_monti_reimplemented %>%
+    rename(`Gene rank` = Rank, `Replicated genes` = Replicated),
+  replication_staar %>% 
+    rename(`Gene rank` = Rank, `Replicated genes` = Replicated)
+) %>%
+  mutate(Trait = case_match(
+    Trait,  
+    "MPTVS" ~ "MPTV",
+    .default = Trait
+  ))
+replication
+
+replication$Significant <- recode(factor(replication$Significant, levels=c(TRUE, FALSE)), `TRUE` = "True", `FALSE` = "False")
+replication_full$Significant <- recode(factor(replication_full$Significant, levels=c(TRUE, FALSE)), `TRUE` = "True", `FALSE` = "False")
+replication
+
+replication <- replication %>%
+  mutate(Method = factor(Method, levels=methods)) %>%
+  mutate(Trait = case_match(
+    Trait,
+    "MPTVS" ~ "MPTV",
+    .default = Trait
+  ))
+replication
+
+
+replication_plot <- ggplot(replication, aes(x=`Gene rank`, y=`Replicated genes`, color=Method)) +
+geom_ribbon(aes(#y ='RVAT_means', 
+                ymin=`ymin`, 
+                ymax=`ymax`, 
+               fill=Method), alpha = .2, color = NA) + 
+geom_abline(intercept=0, slope=1, color='lightgray', linewidth=0.5) +
+geom_step(linewidth=0.4, aes(linetype=Significant)) +
+scale_color_manual(values = colors) +
+theme_classic() +
+base_theme +
+theme(
+    axis.text.x=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
+    axis.text.y=element_text(angle=45,
+                             size = font_size, family = font_family),
+    legend.position = "none"
+)
+replication_plot
+
+max_significant <- replication %>% 
+  filter(as.logical(Significant)) %>% 
+  group_by(Method) %>% 
+  summarize(`Gene rank` = max(`Gene rank`), `Replicated genes` = max(`Replicated genes`))
+max_significant
+
+#max_significant[max_significant$Method == "DeepRVAT","Gene rank"] <- total_sig_genes["mean_generank"][1,]
+#max_significant[max_significant$Method == "DeepRVAT","Replicated genes"] <- total_sig_genes["mean_repgenes"][1,]
+
+replication_plot <- replication_plot + geom_point(data=max_significant, aes(x=`Gene rank`, y=`Replicated genes`, color=Method))
+replication_plot
+
+ggsave("seed_gene_folds_replication_plot.pdf", width = 7.25, height = 6, units = "cm", bg = "transparent", path = file.path(exp_name))
+replication_plot
+```
