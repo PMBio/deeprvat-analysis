@@ -202,9 +202,10 @@ def prep_for_rep_plot(
 
 
 @click.command()
-@click.option("--out-dir", type=click.Path(exists=True), default=".")
+@click.option("--out-file", type=click.Path(), default="replication.parquet")
 @click.option("--recompute-comparison-results", is_flag=True)
 @click.option("--analyze-all-repeats", is_flag=True)
+@click.option("--result-files",  multiple = True, type=click.Path(exists=True))
 @click.argument("experiment-dir", type=click.Path(exists=True))
 def cli(
         out_dir: str, 
@@ -212,7 +213,6 @@ def cli(
         recompute_comparison_results: bool,
         analyze_all_repeats: bool,
 ):
-    logger.info(f'analysing phenotypes {PHENOTYPES}')
     if recompute_comparison_results:
         comparison_results = {
             pheno: read_comparison_results(
@@ -226,22 +226,30 @@ def cli(
         }
         with open("comparison_results.pkl", "wb") as f:
             pickle.dump(comparison_results, f)
-         df = pd.DataFrame([(key, value) for key, values in comparison_results.items() for value in values], columns=['phenotype', 'gene'])
+        df = pd.DataFrame([(key, value) for key, values in comparison_results.items() for value in values], columns=['phenotype', 'gene'])
         df['phenotype'] = [name.replace(' ', '_') for name in df['phenotype']]
         df.to_parquet('comparison_results.parquet') #deeprvat-analysis/data/comparison_results.parquet" used by monti/staar replication scripts
     else:
         with open("comparison_results.pkl", "rb") as f:
             comparison_results = pickle.load(f)
+    if len(result_files) == 0:
+        logger.info(f'Analysing result files for phenotypes {PHENOTYPES}')
+        results = pd.concat(
+            [
+                pd.read_parquet(
+                    Path(experiment_dir) / p / "deeprvat/eval/all_results.parquet",
+                    engine="pyarrow",
+                )
+                for p in PHENOTYPES
+            ]
+        )
+    else: 
+        logger.info(f'Analysing result files for result files {result_files}')
+        results = pd.concat(
+            [pd.read_parquet(f,engine="pyarrow",)
+                for f in result_files]
+        )
 
-    results = pd.concat(
-        [
-            pd.read_parquet(
-                Path(experiment_dir) / p / "deeprvat/eval/all_results.parquet",
-                engine="pyarrow",
-            )
-            for p in PHENOTYPES
-        ]
-    )
     phenotypes_to_remove = set(results['phenotype'].unique()) - set(comparison_results.keys())
     logger.info(f'excluding pheotypes {phenotypes_to_remove} because they are not in comparison studies')
     results = results[~results['phenotype'].isin(phenotypes_to_remove)]
