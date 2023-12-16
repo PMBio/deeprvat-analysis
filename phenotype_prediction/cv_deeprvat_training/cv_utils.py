@@ -114,7 +114,8 @@ def spread_config(
                     logger.info(config[module]["baseline_results"])
             logger.info(f"Writing config for module {module}")
             split_suffix = "_test" if split == "test" else ""
-            with open(f"{out_path}/{module_folder_dict[module]}/config{split_suffix}.yaml", "w") as f:
+            with open(f"{out_path}/{module_folder_dict[module]}/config{split_suffix}.yaml","w") as f:
+                yaml.dump(config[module], f)
 
 
 

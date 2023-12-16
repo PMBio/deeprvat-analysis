@@ -242,8 +242,16 @@ def compute_alternative_burdens_(
         chunks=(1000, 1000),
         dtype=np.float32,
     )
-
     burdens[chunk_start:chunk_end] = this_burdens
+    # import ipdb; ipdb.set_trace()
+    this_samples = np.expand_dims(np.array([int(i) for i in batch['sample']]),1)
+    samples = zarr.open(Path(cache_dir) / 'samples.zarr',
+            mode='a',
+            shape=(n_total_samples, ) + this_samples.shape[1:],
+            chunks=(None, None),
+            dtype=np.float32)
+
+    samples[chunk_start:chunk_end] = this_samples
     if this_y.shape[1] > 0:
         # only write results for y and x if y exists.
         # non-existence of y is the case when y_phenotype is empty
@@ -262,15 +270,10 @@ def compute_alternative_burdens_(
             chunks=(None, None),
             dtype=np.float32,
         )
-        # ids = zarr.open(Path(cache_dir) / 'ids.zarr',
-        #             mode='a',
-        #             shape=(n_total_samples, ) + this_y.shape[1:],
-        #             chunks=(None, None),
-        #             dtype=np.float32)
-
+        
         y[chunk_start:chunk_end] = this_y
         x[chunk_start:chunk_end] = this_x
-        # ids[chunk_start:chunk_end] = np.expand_dims(np.array([int(i) for i in batch['sample']]),1)
+        
 
     else:
         y = None

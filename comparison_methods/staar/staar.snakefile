@@ -94,12 +94,7 @@ rule replication:
     input:
         expand(
             "{phenotype}/{mask}/results/burden_associations.parquet",
-            phenotype=NEW_PHENOTYPES,
-            mask=masks,
-        ),
-        expand(
-            "{phenotype}/{mask}/results/burden_associations_testing.parquet",
-            phenotype=OLD_PHENOTYPES,
+            phenotype=phenotypes,
             mask=masks,
         ),
     output:
@@ -118,28 +113,28 @@ rule replication:
 
 
 
-rule replication:
-    conda:
-        "r-env"
-    input:
-        expand(
-            "{phenotype}/{mask}/results/burden_associations.parquet",
-            phenotype=phenotypes,
-            mask=masks,
-        ),
-    output:
-        out_path="replication_staar.Rds",
-    params:
-        code_dir=pipeline_dir,
-        phenotypes=phenotypes,
-        masks=masks,
-        phenotype_suffix=''
-    threads: 1
-    resources:
-        mem_mb=32000,
-        load=16000,
-    script:
-        f"{pipeline_dir}/staar_replication.R"
+# rule replication:
+#     conda:
+#         "r-env"
+#     input:
+#         expand(
+#             "{phenotype}/{mask}/results/burden_associations.parquet",
+#             phenotype=phenotypes,
+#             mask=masks,
+#         ),
+#     output:
+#         out_path="replication_staar.Rds",
+#     params:
+#         code_dir=pipeline_dir,
+#         phenotypes=phenotypes,
+#         masks=masks,
+#         phenotype_suffix=''
+#     threads: 1
+#     resources:
+#         mem_mb=32000,
+#         load=16000,
+#     script:
+#         f"{pipeline_dir}/staar_replication.R"
 
 rule all_regression:
     priority: 100
@@ -229,7 +224,7 @@ rule all_data:
             chunk=range(n_chunks),
         ),
 
-
+# build-data --n-chunks 50 --chunk 0 --dataset-file LDL_direct/plof/association_dataset_pickled.pkl --data-file LDL_direct/plof/association_dataset_full.pkl LDL_direct/plof/config.yaml geno.h5 anno.h5 x.h5 y.h5
 rule build_data:
     input:
         data="{phenotype}/{mask}/association_dataset_full.pkl",
