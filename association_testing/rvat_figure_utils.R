@@ -31,7 +31,7 @@ binary_phenotypes = c(
 
 monti_staar_name_dict = c('new_phenotypes' = '_new_phenotypes',
                           'all_phenotypes' =  '_all_phenotypes',
-                          'all' = '')
+                          'training_phenotypes' = '_training_phenotypes')
 
 
 phenotype_renamer = c('WHR Body mass index BMI corrected' = 'WHR', 
@@ -118,6 +118,7 @@ names(phenotype_old_new_dict) = new_names
 quant_phenotypes = c(old_quant_phenotypes, new_quant_phenotypes)
 
 
+
 ## Trait groupings 
 
 quant_trait_grouping = c(
@@ -152,7 +153,7 @@ binary_trait_grouping_list <- list(
     "Cholelithiasis",
     "Irritable bowel syndrome"
   ),
-  "Neurological and Mental Health" = c(
+  "Neurological/Mental" = c( #Neurological and Mental Health
     "Depression",
     "Migraine"
   ),
@@ -167,7 +168,7 @@ binary_trait_grouping_list <- list(
   "Ophthalmic" = c(
     "Cataract"
   ),
-  "Allergies and Immune" = c(
+  "Allergies/Immune" = c(
     "Allergic rhinitis"
   ),
   "Musculoskeletal" = c(
@@ -254,6 +255,19 @@ base_theme_wo_margin <- theme(
   legend.background = element_rect(fill='transparent'), #transparent legend bg
   legend.box.background = element_rect(fill='transparent', color=NA), #transparent legend panel
 )
+
+
+checkResExistence = function(phenotypes, results_dir){
+  all_files_exist = TRUE
+  for (p in phenotypes) {
+    this_res = file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet")
+    # Check if the file exists
+    if (!file.exists(this_res)) {
+      all_files_exist = FALSE
+    }
+  }
+  return(all_files_exist)
+}
 ############################################################ 
 
 
@@ -274,8 +288,32 @@ loadDeepRVATResults = function(results_dir, phenotypes, phenotype_renamer){
   significant <- results %>%
     filter(significant) %>%
     distinct(Trait, Method, gene, .keep_all = TRUE)
-  
-  counts <- bind_rows(
+
+  # count sum of 'significant' with summarize instead of using '%>% count' since
+  # count on significant genes only will loose trait/methods with zero counts
+  counts_single = results %>% 
+    select(Trait, Method, gene, significant) %>% 
+    distinct() %>%
+    group_by(Trait, Method) %>%
+    summarise(n = sum(significant)) %>% 
+    ungroup() %>% 
+    mutate(is_single_trait = 'True')
+
+  counts_all = counts_single %>%
+    group_by(Method) %>%
+    summarise(n = sum(n)) %>%
+    ungroup() %>%
+    mutate(Trait = "All traits", is_single_trait = "False") 
+
+  counts = bind_rows(counts_single, counts_all)
+  print('Trait/method combinations with zero counts')
+  print(counts %>% filter(n == 0) )
+
+  ##### Sanity check, can be removed in future #############################
+  ###### the next part is just a sanity check to confirm that the counts as we count them now
+  # (using group_by %>% summarise(n = sum(significant)) on results instead of count() on significant)
+  # is the same as before for rows with non-zero n
+  counts_old <- bind_rows(
     significant %>% mutate(is_single_trait = "True"),
     significant %>% mutate(Trait = "All traits", is_single_trait = "False")) %>%
     mutate(
@@ -283,8 +321,18 @@ loadDeepRVATResults = function(results_dir, phenotypes, phenotype_renamer){
       Trait = factor(Trait)
     ) %>%
     count(Trait, Method, is_single_trait, .drop = FALSE)
-  counts[is.na(counts$is_single_trait), "is_single_trait"] <- "True"
+  counts_old[is.na(counts_old$is_single_trait), "is_single_trait"] <- "True"
+  df1 = counts %>% filter(n >0) 
+  df2 = counts_old %>% filter(n >0) 
+  stopifnot(all(dim(df1) == dim(df2)))
+  merged_control = merge(df1, 
+        df2, by = c("Trait", "Method", "is_single_trait"),
+        suffixes = c("_df1", "_df2"))
+  stopifnot(all(merged_control$n_df1 == merged_control$n_df2))
+    
   # counts = counts %>% filter(Method != 'DeepRVAT wo baseline')
+  ############# Sanity check end ####################################
+
   
   pheno_names_to_keep = as.character(unique(counts[['Trait']]))
   results = c('counts' = list(counts), 
@@ -375,6 +423,6 @@ makeReplicationPlot = function(replication, max_rank, title = ''){
     group_by(Method) %>% 
     summarize(`Gene rank` = max(`Gene rank`), `Replicated genes` = max(`Replicated genes`))
   max_significant
-  replication_plot <- replication_plot + geom_point(data=max_significant, aes(x=`Gene rank`, y=`Replicated genes`, color=Method))
+  replication_plot <- replication_plot + geom_point(data=max_significant, aes(x=`Gene rank`, y=`Replicated genes`, color=Method), size = 2)
   return(replication_plot)
 }
