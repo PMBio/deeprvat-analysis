@@ -257,10 +257,15 @@ base_theme_wo_margin <- theme(
 )
 
 
-checkResExistence = function(phenotypes, results_dir){
+checkResExistence = function(phenotypes, results_dir, results_dir_pattern = NA){
   all_files_exist = TRUE
+  print(results_dir_pattern)
   for (p in phenotypes) {
-    this_res = file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet")
+    if(!is.na(results_dir_pattern)){
+      this_res =  file.path(results_dir, p, results_dir_pattern, "all_results.parquet")
+    }else{
+      this_res = file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet")
+    }
     # Check if the file exists
     if (!file.exists(this_res)) {
       all_files_exist = FALSE
@@ -272,11 +277,16 @@ checkResExistence = function(phenotypes, results_dir){
 
 
 ####################### Data functions ############################ 
-loadDeepRVATResults = function(results_dir, phenotypes, phenotype_renamer){
+loadDeepRVATResults = function(results_dir, phenotypes, phenotype_renamer, results_dir_pattern = NA){
   results_list <- list()
+  print(paste('results_dir_pattern', results_dir_pattern))
   for (p in phenotypes) {
     print(p)
-    this_res =  read_parquet(file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet"))
+    if(!is.na(results_dir_pattern)){
+      this_res =  read_parquet(file.path(results_dir, p, results_dir_pattern, "all_results.parquet"))
+    }else{
+      this_res =  read_parquet(file.path(results_dir, p, "deeprvat", "eval", "all_results.parquet"))
+    }
     results_list[[p]] <- this_res 
   }
   results <- bind_rows(results_list) %>%
