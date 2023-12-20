@@ -55,8 +55,8 @@ METHODS = list(
     reversed(
         [f"{m} {t}" for m in ["Burden", "SKAT"] for t in ["pLOF", "missense"]]
         + [  # , '"likely deleterious"']] +
-            "Burden pLOF/missense",
-            "SKAT pLOF/missense",
+            # "Burden pLOF/missense",
+            # "SKAT pLOF/missense",
             "Burden/SKAT combined",
             "DeepRVAT",
         ]
@@ -141,7 +141,6 @@ def prep_for_rep_plot(
     replication_results = replication_results.rename(
         columns={"experiment_group": "Method", "significant": "Significant"}
     )
-
     if method_mapping is not None:
         replication_results["Method"] = replication_results["Method"].apply(
             lambda x: method_mapping[x] if x in method_mapping else x
@@ -184,6 +183,7 @@ def prep_for_rep_plot(
         top_list.append(this_df)
 
     top = pd.concat(top_list)
+
     top["Significant"] = pd.Categorical(
         top["Significant"], categories=[True, False], ordered=True
     )
@@ -205,7 +205,7 @@ def prep_for_rep_plot(
 @click.command()
 @click.option("--out-file", type=click.Path(), default="replication.parquet")
 @click.option("--recompute-comparison-results", is_flag=True)
-@click.option("--analyze-all-repeats", is_flag=True)
+# @click.option("--analyze-all-repeats", is_flag=True)
 @click.option("--n-repeats", type=int)
 @click.option("--result-files",  multiple = True, type=click.Path(exists=True))
 @click.argument("experiment-dir", type=click.Path(exists=True))
@@ -215,7 +215,7 @@ def cli(
         result_files: Tuple,
         recompute_comparison_results: bool,
         n_repeats: int, 
-        analyze_all_repeats: bool,
+        # analyze_all_repeats: bool,
 ):
     if recompute_comparison_results:
         comparison_results = {
@@ -251,7 +251,7 @@ def cli(
         logger.info(f'Analysing result files for result files {result_files}')
         results = pd.concat(
             [pd.read_parquet(f,engine="pyarrow",)
-                for f in result_files]
+                for f in tqdm(result_files)]
         )
 
     phenotypes_to_remove = set(results['phenotype'].unique()) - set(comparison_results.keys())
@@ -262,67 +262,61 @@ def cli(
         config = yaml.safe_load(f)
     n_repeats = n_repeats if n_repeats is not None else config["n_repeats"]
 
-    if analyze_all_repeats:
-        repeats_to_use = range(1, n_repeats + 1)
-    else:
-        repeats_to_use = [n_repeats]
 
-    logger.info(f'Analyzing repeats {repeats_to_use}')
-    all_repeats_list = []
-    for repeats in repeats_to_use:
-        #implement here that all different combinations of n repeats are used
-        logger.info(f"Analyzing replication with {repeats} DeepRVAT repeats")
-        rep_list = []
-        logger.info(f"Result columns {results.columns}")
-        if "repeats" in results.columns:
-            if "repeat_combination" in results.columns:
-                print('Computing replication for each repeat combination')
-                all_combis = results.query("repeats == @repeats")['repeat_combination'].unique()
-                for combi in all_combis:
-                    replication_data_all = prep_for_rep_plot(
-                        results.query("repeats == @repeats & repeat_combination == @combi"),
-                        comparison_results,
-                        n_genes=1000,
-                    ).assign(pheno_grouping="all_phenotypes")
-                    rep_list.append(replication_data_all.assign(repeat_combination = combi))
-            else:
+    #implement here that all different combinations of n repeats are used
+    logger.info(f"Analyzing replication with {n_repeats} DeepRVAT repeats")
+    rep_list = []
+    logger.info(f"Result columns {results.columns}")
+    if "repeats" in results.columns:
+        if "repeat_combination" in results.columns:
+            logger.info(f'Computing replication for each repeat combination')
+            all_combis = results.query("repeats == @n_repeats")['repeat_combination'].unique()
+            for combi in all_combis:
+                logger.info(f'Analyzing combi {combi}')
                 replication_data_all = prep_for_rep_plot(
-                    results.query("repeats == @repeats"),
+                    results.query("repeats == @n_repeats & repeat_combination == @combi"),
                     comparison_results,
                     n_genes=1000,
                 ).assign(pheno_grouping="all_phenotypes")
-                rep_list.append(replication_data_all)
+                rep_list.append(replication_data_all.assign(repeat_combination = combi))
         else:
-            print('No repeats column in the data')
             replication_data_all = prep_for_rep_plot(
-                results, #.query("repeats == @repeats"),
+                results.query("repeats == @n_repeats"),
                 comparison_results,
                 n_genes=1000,
             ).assign(pheno_grouping="all_phenotypes")
             rep_list.append(replication_data_all)
+    else:
+        print('No repeats column in the data')
+        replication_data_all = prep_for_rep_plot(
+            results, #.query("repeats == @repeats"),
+            comparison_results,
+            n_genes=1000,
+        ).assign(pheno_grouping="all_phenotypes")
+        rep_list.append(replication_data_all)
+    
+    logger.warning(f"Per phenotype analysis is currently only done for one repeat combi")
+    for pheno in results["phenotype"].unique():
+        logger.info(pheno)
+        if ("repeats" in results.columns) & ("repeat_combination" in results.columns):
+            replication_data_pheno = prep_for_rep_plot(
+                results.query("phenotype == @pheno & repeats == @n_repeats & repeat_combination == @combi"),
+                comparison_results,
+                n_genes=1000,
+            ).assign(pheno_grouping="single_pheno")
+        else:
+            replication_data_pheno = prep_for_rep_plot(
+                results.query("phenotype == @pheno"),
+                comparison_results,
+                n_genes=1000,
+            ).assign(pheno_grouping="single_pheno")
+        rep_list.append(replication_data_pheno)
 
-        logger.warning(f"Per phenotype analysis is currently only done for one repeat combi")
-        for pheno in results["phenotype"].unique():
-            if ("repeats" in results.columns) & ("repeat_combination" in results.columns):
-                replication_data_pheno = prep_for_rep_plot(
-                    results.query("phenotype == @pheno & repeats == @n_repeats & repeat_combination == @combi"),
-                    comparison_results,
-                    n_genes=1000,
-                ).assign(pheno_grouping="single_pheno")
-            else:
-                replication_data_pheno = prep_for_rep_plot(
-                    results.query("phenotype == @pheno"),
-                    comparison_results,
-                    n_genes=1000,
-                ).assign(pheno_grouping="single_pheno")
-            rep_list.append(replication_data_pheno)
-
-        this_replication_data = pd.concat(rep_list).query("Method in @METHODS")
-        this_replication_data["repeats"] = repeats
-        all_repeats_list.append(this_replication_data)
+    this_replication_data = pd.concat(rep_list).query("Method in @METHODS")
+    this_replication_data["repeats"] = n_repeats
 
     logger.info("Writing replication")
-    replication_data = pd.concat(all_repeats_list)
+    replication_data = pd.concat(rep_list)
     # if 'replication.parquet' not in out_file:
     #     # in this case assume the the 'file' was actually a directory 
     #     # because we previously passed an out_dir instead of an out_file
