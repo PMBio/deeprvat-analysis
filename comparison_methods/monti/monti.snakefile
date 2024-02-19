@@ -265,7 +265,7 @@ rule association_dataset:
         "{phenotype}/{vtype}/config.yaml",
     output:
         full="{phenotype}/{vtype}/association_dataset_full.pkl",
-        pickled="{phenotype}/{vtype}/association_dataset_pickled.pkl",
+        temp(pickled="{phenotype}/{vtype}/association_dataset_pickled.pkl"),
     threads: 1
     priority: 40
     resources:
