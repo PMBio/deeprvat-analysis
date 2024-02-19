@@ -10,10 +10,19 @@ phenotype_suffix = snakemake@params[["phenotype_suffix"]] #TODO delete this late
 code_dir = snakemake@params[["code_dir"]]
 out_path = snakemake@output[["out_path"]]
 query_phenotypes = snakemake@params[["phenotypes"]]
-print(paste("Analyzing results for phenotypes:", query_phenotypes))
+
+# setwd('~/ukbb/experiments/more_phenotypes/monti/')
+# phenotype_suffix = '_training_phenotypes'
+# code_dir = '~/deeprvat_public/deeprvat-analysis/comparison_methods/monti'
+
+# out_path = '/omics/groups/OE0540/internal/users/holtkamp/analysis/repeat_mulit_test_analysis/data/monti/replication_monti_training_phenotypes.Rds'
 
 
 source(file.path(code_dir, "../../utils.R"))  #get phenotype renamer
+source(file.path(code_dir, "../utils.R"))  #p-value combination functions 
+
+# query_phenotypes = OLD_PHENOTYPES #TODO delete this, only for testing 
+print(paste("Analyzing results for phenotypes:", query_phenotypes))
 
 phenotypes_map = gsub("_", " ", query_phenotypes)
 names(phenotypes_map) = query_phenotypes
@@ -85,9 +94,14 @@ eac_threshold = 5
 pheno_col = "Trait"
 pval_thres = 0.05
 
-add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotype") {
+add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotype",
+                            combine_pvals = NA) {
+    
+    if (!is.na(combine_pvals)){
+      df = aggPvalsToGene(df, combine_pvals, grouping_cols = c('gene', 'pval_type', pheno_col))
+    }
     df <- df %>%
-        group_by(across(pheno_col), pval_type) %>%
+        group_by(across(pheno_col)) %>%
         mutate(qval = p.adjust(pval, method = "BH")) %>%
         mutate(Significant = qval < thresh) %>%
         ungroup()
@@ -150,25 +164,33 @@ write_parquet(all_sig_counts, file.path(dirname(out_path), paste0('monti_counts'
   
 print("Checking replication")
 missing_replication_traits = setdiff(c(unlist(unique(test_results[pheno_col]))), unlist(unique(comparison[pheno_col])))
-print(paste('Traits not present in replication data', missing_replication_traits, 'excluding these traits'))
+warning(paste('Traits not present in replication data', missing_replication_traits, 'excluding these traits'))
 test_results = as.data.table(test_results)
 test_results = test_results[!(Trait %in% missing_replication_traits)]
 test_results = as_tibble(test_results)
 print(nrow(test_results %>% distinct(Trait)))
 
-replication_monti <- add_replication(test_results %>%
-    rename(gene = gene_id) %>%
-    filter(EAC_filtered >= eac_threshold) %>%
-    filter(pval_type == "score"), comparison, thresh = pval_thres, pheno_col = pheno_col) %>%
-    select(Rank, Replicated, Significant, Method, Trait, pval_type, gene, {{pheno_col}}) #%>%
-    # mutate(Trait = replace(Trait, Trait == "Mean platelet thrombocyte volume", "MPTVS"))
-replication_monti %>%
-    distinct(Trait)
-
-
-print("Saving output")
-
-saveRDS(replication_monti, out_path)
-write_parquet(replication_monti, paste(str_split(out_path, "\\.")[[1]][1], "parquet", sep = "."))
+for (agg_method in c(NA, "cct", "bonferroni")){
+  replication_monti <- add_replication(test_results %>%
+      rename(gene = gene_id) %>%
+      filter(EAC_filtered >= eac_threshold) %>%
+      filter(pval_type == "score"), comparison, thresh = pval_thres, pheno_col = pheno_col, combine_pvals = agg_method) %>%
+      ungroup() %>%
+      mutate(Method = 'Monti et al.') %>% 
+      select(Rank, Replicated, Significant, Method, Trait, pval_type, gene, {{pheno_col}}) %>%
+      as_tibble()
+    #%>%
+      # mutate(Trait = replace(Trait, Trait == "Mean platelet thrombocyte volume", "MPTVS"))
+  replication_monti %>%
+      distinct(Trait)
+  out_file = str_split(out_path, "\\.")[[1]][1]
+  out_file = ifelse(is.na(agg_method), out_file, paste(out_file, agg_method, sep = '_'))
+  if(is.na(agg_method)){
+    stopifnot(paste(out_file, "Rds", sep = ".") == out_path)
+  }
+  print("Saving output")
+  saveRDS(replication_monti, paste(out_file, "Rds", sep = "."))
+  write_parquet(replication_monti, paste(out_file, "parquet", sep = "."))
+}
 
 print("Finished")
