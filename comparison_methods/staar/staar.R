@@ -32,12 +32,12 @@ y_dt = as.data.frame(t(y_data))
 colnames(y_dt) = c("Y")
 print(length(unique(y_dt)))
 print(length(unique(y_dt)) == 2)
-if (length(unique(y_dt)) == 2){
-    print('Binary y, using binomial family for glm')
-    glm_family = 'binomial'
-}else{
-    print('Continuous y, using binomial family for glm')
-    glm_family = 'gaussian'
+if (length(unique(y_dt)) == 2) {
+    print("Binary y, using binomial family for glm")
+    glm_family = "binomial"
+} else {
+    print("Continuous y, using binomial family for glm")
+    glm_family = "gaussian"
 }
 
 null_model_data = cbind(y_dt, covariates_dt)
@@ -45,8 +45,7 @@ null_model_data = cbind(y_dt, covariates_dt)
 null_model_formula = paste("Y ~ ", paste(colnames(covariates_dt), collapse = "+"))
 print(null_model_formula)
 
-obj_nullmodel <- fit_null_glm(null_model_formula, data = null_model_data, 
-    family = glm_family)
+obj_nullmodel <- fit_null_glm(null_model_formula, data = null_model_data, family = glm_family)
 
 genes <- h5ls(genotype_file)$name
 print(paste("Running STAAR on ", length(genes), " genes"))
