@@ -7,23 +7,22 @@ library(ggpubr)
 library(cowplot)
 library(tibble)
 
-# code_dir = '/home/e400p/deeprvat_public/deeprvat-analysis/association_testing'
+
 code_dir = snakemake@params[["code_dir"]]
 source(file.path(code_dir, 'rvat_figure_utils.R'))
 source(file.path(code_dir, 'rvat_figure_paths.R'))
 
 
-
-## Define experiment directories
-# replication_file_deeprvat = '~/ukbb/experiments/experiments_eva/replication_dataset_bugfix/deeprvat_alpha_mvc0/replication.parquet'
-# results_dir = '/home/e400p/ukbb/experiments/revision_2/deeprvat_cv/h0_seed_genes_10_5_fold_standard_config'
-# results_dir = "~/ukbb/experiments/dataset_bugfix/deeprvat_alpha_mvc0/"
 replication_file_deeprvat = snakemake@input[["replication"]]
 results_dir = snakemake@params[["results_dir"]]
 out_file = snakemake@output[[1]][1]
-print(out_file)
-results_dir_pattern = snakemake@params[["results_dir_pattern"]]
-results_dir_pattern = ifelse(is.null(results_dir_pattern), NA, results_dir_pattern)
+max_rank = snakemake@params[["max_rank"]]
+results_dir_pattern = snakemake@params[["results_dir_pattern"]] #TODO can be removed
+
+
+
+max_rank = ifelse(is.null(max_rank) | length(max_rank) == 0, 500, max_rank)
+results_dir_pattern = ifelse(is.null(results_dir_pattern) | results_dir_pattern == '', NA, results_dir_pattern)
 
 print(sprintf('results dir pattern %s', results_dir_pattern))
 
@@ -37,16 +36,46 @@ cat('Other result dirs: ', monti_res_binary_dir,
     timing_data_dir, sep = '\n')
 
 
+rename_vector <- c('LDL_direct' = 'LDL_direct_statin_corrected', 
+                  'Cholesterol' = 'Cholesterol_statin_corrected')
+# Use rename_vector to rename names1 vector
+quant_phenotypes_statin_corrected <- ifelse(quant_phenotypes %in% names(rename_vector), 
+                            rename_vector[quant_phenotypes], 
+                            quant_phenotypes)
+names(quant_phenotypes_statin_corrected) = names(quant_phenotypes)
+
+old_quant_phenotypes_statin_corrected <- ifelse(old_quant_phenotypes %in% names(rename_vector), 
+                            rename_vector[old_quant_phenotypes], 
+                            old_quant_phenotypes)      
+names(old_quant_phenotypes_statin_corrected) = names(old_quant_phenotypes)
+
+new_quant_phenotypes_statin_corrected <- ifelse(new_quant_phenotypes %in% names(rename_vector), 
+                            rename_vector[new_quant_phenotypes], 
+                            new_quant_phenotypes)   
+names(new_quant_phenotypes_statin_corrected) = names(new_quant_phenotypes)
+
 if(checkResExistence(quant_phenotypes, results_dir, results_dir_pattern)){
   pheno_choice = 'all_phenotypes'
+}else if (checkResExistence(quant_phenotypes_statin_corrected, results_dir, results_dir_pattern)){
+  pheno_choice = 'all_phenotypes'
+  quant_phenotypes = quant_phenotypes_statin_corrected
 }else if (checkResExistence(old_quant_phenotypes, results_dir, results_dir_pattern)){
   pheno_choice = 'training_phenotypes'
+}else if (checkResExistence(old_quant_phenotypes_statin_corrected, results_dir, results_dir_pattern)){
+  print('taking statin corrected folders')
+  pheno_choice = 'training_phenotypes'
+  old_quant_phenotypes = old_quant_phenotypes_statin_corrected
 }else if (checkResExistence(new_quant_phenotypes, results_dir, results_dir_pattern)){
   pheno_choice = 'new_phenotypes'
+}else if (checkResExistence(new_quant_phenotypes_statin_corrected, results_dir, results_dir_pattern)){
+  pheno_choice = 'new_phenotypes'
+  new_quant_phenotypes= new_quant_phenotypes_statin_corrected
 } else{
   stop('files for all options of pheno_choice are missing')
 }
-print(sprintf('Analyzing for pheno choice %s', pheno_choice))
+
+# pheno_choice  =  'training_phenotypes' #TODO delete this
+# old_quant_phenotypes = old_quant_phenotypes_statin_corrected   #TODO delete this
 
 
 quant_pheno_dict = c('all_phenotypes' = list(quant_phenotypes), 
@@ -54,9 +83,12 @@ quant_pheno_dict = c('all_phenotypes' = list(quant_phenotypes),
                      'new_phenotypes' = list(new_quant_phenotypes))
 
 quant_phenotypes_to_analyse = quant_pheno_dict[[pheno_choice]]
+print(sprintf('Analyzing for pheno choice %s', pheno_choice ))
+print(quant_phenotypes_to_analyse)
 
 ## DeepRVAT
 
+statin_strings = "_statin_corrected| statin corrected" # used by loadDeepRVATResults
 
 all_deeprvat_res = loadDeepRVATResults(results_dir = results_dir, 
   phenotypes = quant_phenotypes_to_analyse, 
@@ -69,11 +101,11 @@ pheno_names_to_keep = all_deeprvat_res[['pheno_names_to_keep']]
 
 
 
+
 ## Load Monti et al. results
 
 
 counts_monti_quant = readRDS(file.path(monti_quant_dir, paste0("monti_counts", monti_staar_name_dict[pheno_choice], ".Rds"))) %>%
-  filter(Trait != 'WHR') %>%
   mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) %>%
   rename(n = discoveries) %>%
   mutate(Method = 'Monti et al.') %>%
@@ -81,15 +113,14 @@ counts_monti_quant = readRDS(file.path(monti_quant_dir, paste0("monti_counts", m
   filter(Trait %in% pheno_names_to_keep)
 
 monti_res_quant = readRDS(file.path(monti_quant_dir, paste0("monti_results", monti_staar_name_dict[pheno_choice], ".Rds")))  %>% 
-  filter(Trait != 'WHR') %>%
   mutate(Method = 'Monti et al.') %>%
   mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>% 
   filter(Trait %in% pheno_names_to_keep)
 monti_res_quant %>% distinct(Trait)
 
 
-assertthat::assert_that(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_monti_quant %>% distinct(Trait) %>% pull(Trait)))
-assertthat::assert_that(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), monti_res_quant %>% distinct(Trait) %>% pull(Trait)))
+stopifnot(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_monti_quant %>% distinct(Trait) %>% pull(Trait)))
+stopifnot(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), monti_res_quant %>% distinct(Trait) %>% pull(Trait)))
 
 all_traits_count = sum(counts_monti_quant %>% filter(is_single_trait == 'True') %>% pull(n))
 counts_monti_quant = counts_monti_quant %>% mutate(n = ifelse(Trait == 'All traits',all_traits_count, n))
@@ -100,7 +131,6 @@ counts_monti_quant = counts_monti_quant %>% mutate(n = ifelse(Trait == 'All trai
 
 
 counts_staar_quant = readRDS(file.path(staar_quant_dir, paste0("sig_counts_staar", monti_staar_name_dict[pheno_choice], ".Rds"))) %>% 
-  filter(Trait != 'WHR') %>%
   mutate(Method = 'STAAR')  %>%
   rename(n = discoveries) %>%
   mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) %>%
@@ -112,7 +142,6 @@ counts_staar_quant = counts_staar_quant %>% mutate(n = ifelse(Trait == 'All trai
 
 
 staar_res_quant = readRDS(file.path(staar_quant_dir, paste0("staar_corrected", monti_staar_name_dict[pheno_choice], ".Rds")))  %>% 
-  filter(Trait != 'WHR') %>%
   mutate(Method = 'STAAR') %>%
   mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>% 
   filter(Trait %in% pheno_names_to_keep)  %>%
@@ -121,15 +150,14 @@ staar_res_quant = readRDS(file.path(staar_quant_dir, paste0("staar_corrected", m
 
 
 
-assertthat::assert_that(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_staar_quant %>% distinct(Trait) %>% pull(Trait)))
-assertthat::assert_that(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), staar_res_quant %>% distinct(Trait) %>% pull(Trait)))
+stopifnot(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_staar_quant %>% distinct(Trait) %>% pull(Trait)))
+stopifnot(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), staar_res_quant %>% distinct(Trait) %>% pull(Trait)))
 
 
 
 
 ## Combine quantiative counts results
 
- 
 all_counts_quant =  rbind(counts_deeprvat_quant, counts_monti_quant, counts_staar_quant) %>%
   mutate(Method = factor(Method, levels=methods)) %>%
   mutate(Trait = as.character(Trait)) %>%
@@ -254,8 +282,9 @@ pheno_suffix = '_training_phenotypes'
 replication_file_staar = file.path(staar_quant_dir, paste0('replication_staar', pheno_suffix, '.Rds'))
 replication_file_monti = file.path(monti_quant_dir, paste0('replication_monti', pheno_suffix, '.Rds'))
 replication_data = readReplicationData(replication_file_staar, replication_file_monti, replication_file_deeprvat)
-replication_plot = makeReplicationPlot(replication_data %>% filter(Method %in% main_methods), max_rank = 1000)
+replication_plot = makeReplicationPlot(replication_data %>% filter(Method %in% main_methods), max_rank = max_rank)
 replication_plot
+
 
 plot_list[['replication_training']] = replication_plot
 
@@ -273,7 +302,4 @@ if (pheno_choice == 'all_phenotypes'){
 }
 
 print('done')
-
-
-
 

@@ -292,6 +292,7 @@ loadDeepRVATResults = function(results_dir, phenotypes, phenotype_renamer, resul
   results <- bind_rows(results_list) %>%
     rename("Trait" = "phenotype") %>% 
     mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>%
+    mutate(Trait = gsub(statin_strings,"", Trait)) %>%
     filter(Method %in% main_methods)
 
   

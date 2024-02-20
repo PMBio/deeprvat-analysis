@@ -18,6 +18,7 @@ input_files = snakemake@input[["testing_associations"]]
 out_path = snakemake@output[["out_path"]]
 
 source(file.path(code_dir, "monti_utils.R"))
+source(file.path(code_dir, "../utils.R"))
 
 
 print(gene_file)

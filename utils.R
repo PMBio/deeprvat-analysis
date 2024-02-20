@@ -31,10 +31,11 @@ phenotypes <- c(
   "Creatinine",
   "Whole_body_fat_free_mass",
   "Forced_expiratory_volume_in_1_second_FEV1",
-  "QTC_interval",
   "Glycated_haemoglobin_HbA1c",
-  "WHR",
-  "WHR_Body_mass_index_BMI_corrected"
+  "WHR_Body_mass_index_BMI_corrected",
+  'LDL_direct_statin_corrected',
+  'Cholesterol_statin_corrected'
+  
 )
 
 phenotypes_deeprvat <- c(
@@ -70,10 +71,51 @@ phenotypes_deeprvat <- c(
   "Creatinine",
   "Whole body fat free mass",
   "Forced expiratory volume in 1 second FEV1",
-  "QTC interval",
   "Glycated haemoglobin HbA1c",
-  "WHR",
-  "WHR Body mass index BMI corrected"
+  "WHR Body mass index BMI corrected",
+  "LDL direct",
+  "Cholesterol"
+)
+names(phenotypes_deeprvat) = phenotypes
+OLD_PHENOTYPES = c(
+    "Apolipoprotein_A",
+    "Apolipoprotein_B",
+    "Calcium",
+    "Cholesterol",
+    "HDL_cholesterol",
+    "IGF_1",
+    "LDL_direct",
+    "SHBG",
+    "Total_bilirubin",
+    "Triglycerides",
+    "Urate",
+    "Mean_corpuscular_volume",
+    "Platelet_count",
+    "Mean_platelet_thrombocyte_volume",
+    "Platelet_crit",
+    "Standing_height",
+    "Mean_reticulocyte_volume",
+    "Platelet_distribution_width",
+    "Lymphocyte_percentage",
+    "Neutrophill_count",
+    "Red_blood_cell_erythrocyte_count"
+)
+NEW_PHENOTYPES = c(
+  "Body_mass_index_BMI",
+  "Glucose",
+  "Vitamin_D",
+  "Albumin",
+  "Total_protein",
+  "Cystatin_C",
+  "Gamma_glutamyltransferase",
+  "Alkaline_phosphatase",
+  "Creatinine",
+  "Whole_body_fat_free_mass", 
+  "Forced_expiratory_volume_in_1_second_FEV1",
+  # "QTC_interval",
+  "Glycated_haemoglobin_HbA1c",
+  # "WHR",
+  "WHR_Body_mass_index_BMI_corrected"
 )
 
-names(phenotypes_deeprvat) = phenotypes
+

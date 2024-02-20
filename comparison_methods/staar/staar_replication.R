@@ -12,18 +12,13 @@ masks = snakemake@params[["masks"]]
 code_dir = snakemake@params[["code_dir"]]
 out_path = snakemake@output[["out_path"]]
 query_phenotypes = snakemake@params[["phenotypes"]]
-# setwd('~/ukbb/experiments/revision_2/staar_alphamissense')
-# masks = c(
-#     "plof",
-#     "missense",
-#     "disruptive_missense",
-#     "plof_disruptive_missense",
-#     "synonymous")
+correction_method = snakemake@params[["correction_method"]]
+correction_method = ifelse(is.null(correction_method) | length(correction_method) == 0, 'bonferroni',
+                           correction_method)
 
-# phenotype_suffix = '_training_phenotypes'
-# code_dir = '~/deeprvat_public/deeprvat-analysis/comparison_methods/staar'
-# out_path = '/omics/groups/OE0540/internal/users/holtkamp/analysis/repeat_mulit_test_analysis/data/staar/replication_staar_training_phenotypes.Rds'
-# out_path = '~/ukbb/experiments/revision_2/staar_alphamissense/replication_staar_training_phenotypes.Rds'
+combine_pvals = snakemake@params[["combine_pvals"]]
+combine_pvals = ifelse(length(combine_pvals) == 0 | is.null(combine_pvals), 'bonferroni', combine_pvals)
+print(sprintf('using p-value correction method %s', correction_method))
 
 source(file.path(code_dir, "../../utils.R"))  #get phenotype renamer
 source(file.path(code_dir, "../utils.R"))  #p-value combination functions 
@@ -63,16 +58,28 @@ for (pheno in query_phenotypes) {
     }
 }
 print(all_staar_res %>% distinct(phenotype))
-all_staar_res = all_staar_res %>%
-    mutate(Trait = recode(phenotype, !!!phenotypes_deeprvat))
-
-correction_method = "BH"
 eac_threshold = 10  #same as used by Li et al. 2020 (STAAR paper)
+pheno_col = 'Trait'
+
+print(colnames(all_staar_res))
+all_staar_res = all_staar_res %>%
+    mutate(Trait = recode(phenotype, !!!phenotypes_deeprvat)) %>%
+    filter(EAC >= eac_threshold)
+
+print('aggregating pvals to gene level')
+print(all_staar_res %>% group_by(gene, across(all_of(pheno_col))) %>% summarise(n = n()) %>% ungroup() %>% arrange(n) %>% distinct(n))
+if (!is.na(combine_pvals)){
+    all_staar_res = aggPvalsToGene(all_staar_res, combine_pvals, 
+    grouping_cols = c('gene', pheno_col)) %>% 
+      select(-pval_agg_method)
+}
+stopifnot(as.numeric(all_staar_res %>% group_by(gene, across(all_of(pheno_col))) %>% 
+                       summarise(n = n()) %>% ungroup() %>% arrange(n) %>% distinct(n)) == 1)
+
 staar_corrected = all_staar_res %>%
-    filter(EAC >= eac_threshold) %>%
     group_by(Trait) %>%
-    mutate(pval_adj = p.adjust(pval, method = correction_method)) %>%
-    mutate(Significant = factor(pval_adj < alpha, levels = c("TRUE", "FALSE"))) %>%
+    mutate(p_adjust = p.adjust(pval, method = correction_method)) %>%
+    mutate(Significant = factor(p_adjust < alpha, levels = c("TRUE", "FALSE"))) %>%
     ungroup()
 
 sig_counts_staar = staar_corrected %>%
@@ -87,7 +94,7 @@ sig_counts_staar = rbind(sig_counts_staar,
     discoveries = sum(sig_counts_staar[['discoveries']])))
 
 print(sig_counts_staar)
-sum(sig_counts_staar %>%
+sum(sig_counts_staar %>% filter(Trait == 'All traits') %>%
     pull(discoveries))
 
 saveRDS(staar_corrected, file.path(dirname(out_path), paste0('staar_corrected', phenotype_suffix, '.Rds')))
@@ -104,16 +111,12 @@ comparison <- read_parquet(file.path(code_dir, "../../data/comparison_results.pa
 
 
 
-add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotype", 
-                            combine_pvals = NA) {
-    if (!is.na(combine_pvals)){
-      df = aggPvalsToGene(df, combine_pvals, grouping_cols = c('gene', pheno_col))
-    }
+add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotype") {
     df <- df %>%
-        group_by(across(pheno_col)) %>%
-        mutate(qval = p.adjust(pval, method = "BH")) %>%
-        mutate(Significant = qval < thresh) %>%
-        # mutate(Significant = factor(qval < thresh, levels = c('TRUE', 'FALSE'))) %>%
+        group_by(across(all_of(pheno_col))) %>%
+        mutate(p_adjust = p.adjust(pval, method = correction_method)) %>%
+        mutate(Significant = p_adjust < thresh) %>%
+        # mutate(Significant = factor(p_adjust < thresh, levels = c('TRUE', 'FALSE'))) %>%
         ungroup()
     print("getting sig hits")
     rep_list = list()
@@ -121,8 +124,8 @@ add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotyp
     this_df = df
     print("all phenos")
     df_all <- this_df %>%
-        arrange(qval) %>%
-        distinct(across(pheno_col), gene, .keep_all = TRUE) %>%
+        arrange(pval) %>%
+        distinct(across(all_of(pheno_col)), gene, .keep_all = TRUE) %>%
         left_join(comparison, by = c(pheno_col, "gene")) %>%
         replace_na(list(in_comparison = FALSE)) %>%
         mutate(Rank = row_number(), Replicated = cumsum(in_comparison)) %>%
@@ -133,7 +136,7 @@ add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotyp
     for (this_pheno in unique(this_df[[pheno_col]])) {
         pheno_rep <- this_df %>%
             filter(across(all_of(pheno_col)) == this_pheno) %>%
-            arrange(qval) %>%
+            arrange(pval) %>%
             distinct(across(pheno_col), gene, .keep_all = TRUE) %>%
             left_join(comparison, by = c(pheno_col, "gene")) %>%
             replace_na(list(in_comparison = FALSE)) %>%
@@ -151,7 +154,13 @@ add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotyp
 #         select(phenotype, Trait))
 missing_replication_traits = setdiff(c(unlist(unique(all_staar_res['Trait']))), 
     unlist(unique(comparison['Trait'])))
-print(paste('Traits not present in replication data', missing_replication_traits, 'excluding these traits'))
+warning(paste('Traits not present in replication data', missing_replication_traits, 'excluding these traits'))
+
+
+if (phenotype_suffix == '_training_phenotypes'){
+  stopifnot(length(missing_replication_traits) == 0)
+}
+
 all_staar_res = as.data.table(all_staar_res)
 all_staar_res = all_staar_res[!(Trait %in% missing_replication_traits)]
 all_staar_res = as_tibble(all_staar_res)
@@ -160,27 +169,19 @@ print(all_staar_res %>% distinct(Trait))
 # assertthat::assert_that(nrow(all_staar_res %>%
 #     filter(is.na(Trait))) == 0)
 
-if (nrow(all_staar_res %>%
-    filter(is.na(Trait))) == 0){
-        print('caution: not all Traits present in replicatoin data set!')
-    }
 
-for (agg_method in c(NA, "cct", "bonferroni")){
-  replication_staar = add_replication(all_staar_res, comparison %>%
-      select(-phenotype_standardized, phenotype), pheno_col = "Trait", combine_pvals = agg_method) %>%
-      mutate(Method = 'STAAR') %>%
-      select(Rank, Replicated, Significant, Method, Trait, gene) %>%
-      # mutate(exp_name = "STAAR") %>% 
-      as_tibble()
-  
-  print("Saving output")
-  out_file = str_split(out_path, "\\.")[[1]][1]
-  out_file = ifelse(is.na(agg_method), out_file, paste(out_file, agg_method, sep = '_'))
-  if(is.na(agg_method)){
-    stopifnot(paste(out_file, "Rds", sep = ".") == out_path)
-  }
-  saveRDS(replication_staar, paste(out_file, "Rds", sep = "."))
-  write_parquet(replication_staar, paste(out_file, "parquet", sep = "."))
-}
+replication_staar = add_replication(all_staar_res, comparison %>%
+    select(-phenotype_standardized, phenotype), pheno_col = "Trait") %>%
+    mutate(Method = 'STAAR') %>%
+    select(Rank, Replicated, Significant, Method, Trait, gene) %>%
+    # mutate(exp_name = "STAAR") %>% 
+    as_tibble()
+
+print("Saving output")
+out_file = str_split(out_path, "\\.")[[1]][1]
+
+saveRDS(replication_staar, paste(out_file, "Rds", sep = "."))
+write_parquet(replication_staar, paste(out_file, "parquet", sep = "."))
+
 
 print("Finished")

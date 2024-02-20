@@ -63,9 +63,7 @@ NEW_PHENOTYPES = [
   "Creatinine",
   "Whole_body_fat_free_mass", 
   "Forced_expiratory_volume_in_1_second_FEV1",
-  "QTC_interval",
   "Glycated_haemoglobin_HbA1c",
-  "WHR",
   "WHR_Body_mass_index_BMI_corrected"
 ]
 
@@ -76,44 +74,17 @@ phenotypes_eval_dict = {'all_phenotypes':[*OLD_PHENOTYPES, *NEW_PHENOTYPES],
                     'new_phenotypes': NEW_PHENOTYPES,
                     'training_phenotypes': OLD_PHENOTYPES}
 
+
+phenotypes = OLD_PHENOTYPES
+
 # rule all:
 #     input:
-#         expand('replication_monti.Rds',
-#                     key = phenotypes_eval_dict.keys())
+#         expand('replication_monti_{key}.Rds',
+                    # key = phenotypes_eval_dict.keys())
 rule all:
     input:
         expand('replication_monti_{key}.Rds',
-                    key = phenotypes_eval_dict.keys())
-
-rule replication:
-    conda:
-        "r-env"
-    input:
-        expand(
-            "{phenotype}/eval/postprocessed_associations.parquet",
-            phenotype=NEW_PHENOTYPES,
-        ),
-        expand(
-            "{phenotype}/eval/postprocessed_associations_testing.parquet",
-            phenotype=OLD_PHENOTYPES,
-        ),
-    output:
-        out_path="replication_monti_{key}.Rds",
-    params:
-        code_dir=pipeline_dir,
-        phenotypes=lambda wildcards: phenotypes_eval_dict[wildcards.key],
-        phenotype_suffix='_{key}'
-    threads: 1
-    resources:
-        mem_mb=16000,
-        load=16000,
-    script:
-        f"{pipeline_dir}/monti_replication.R"
-# rule all:
-#     input:
-#         expand('replication_monti.Rds',
-#                     key = phenotypes_eval_dict.keys())
-
+                    key = ['training_phenotypes'])
 rule replication:
     conda:
         "r-env"
@@ -122,12 +93,11 @@ rule replication:
             "{phenotype}/eval/postprocessed_associations.parquet",
             phenotype=phenotypes,
         ),
-    output:
-        out_path="replication_monti.Rds",
+        out_path="replication_monti_{key}.Rds",
     params:
         code_dir=pipeline_dir,
-        phenotypes=phenotypes,
-        phenotype_suffix=''
+        phenotypes=lambda wildcards: phenotypes_eval_dict[wildcards.key],
+        phenotype_suffix='_{key}'
     threads: 1
     resources:
         mem_mb=16000,
@@ -265,7 +235,7 @@ rule association_dataset:
         "{phenotype}/{vtype}/config.yaml",
     output:
         full="{phenotype}/{vtype}/association_dataset_full.pkl",
-        temp(pickled="{phenotype}/{vtype}/association_dataset_pickled.pkl"),
+        pickled=temp("{phenotype}/{vtype}/association_dataset_pickled.pkl"),
     threads: 1
     priority: 40
     resources:
