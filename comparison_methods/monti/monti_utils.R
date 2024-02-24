@@ -2,8 +2,7 @@ cct_combine_pvals = function(test_results, cct_vtypes = c("missense", "spliceai"
     cct_combined_pvals = tibble()
     for (vtype in cct_vtypes) {
         this_cols = grep(paste0(vtype, "-"), names(test_results), value = TRUE)
-        # use score pvalue to checkt if the p-value from the combined vartype + plof test should be used only if score-test pvalue for skat or burden <
-        # 0.1
+        # use score pvalue to checkt if the p-value from the combined vartype + plof test should be used only if score-test pvalue for skat or burden < 0.1
         do_cct_df = test_results %>%
             select(-pval, -EAC, -EAC_filtered) %>%
             pivot_wider(values_from = pv_score, names_from = Method)
@@ -63,8 +62,7 @@ cct_combine_pvals = function(test_results, cct_vtypes = c("missense", "spliceai"
     return(cct_combined_pvals)
 }
 
-ReadResultTables <- function(exp_names, vtypes = c("missense", "plof"), ttypes = c("burden", "skat"), phenotype_dirs = phenotype_dirs_sub, cols_to_keep = c("gene",
-    "EAC", "pval", "EAC_filtered")) {
+ReadResultTables <- function(exp_names, vtypes = c("missense", "plof"), ttypes = c("burden", "skat"), phenotype_dirs = phenotype_dirs_sub, cols_to_keep = c("gene", "EAC", "pval", "EAC_filtered")) {
     res_list = c()
     for (exp_name in names(exp_names)) {
         print(exp_name)
