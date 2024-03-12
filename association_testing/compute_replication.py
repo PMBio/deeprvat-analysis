@@ -28,10 +28,10 @@ PHENOTYPES = [
     "Apolipoprotein_A",
     "Apolipoprotein_B",
     "Calcium",
-    "Cholesterol",
+    "Cholesterol_statin_corrected",
     "HDL_cholesterol",
     "IGF_1",
-    "LDL_direct",
+    "LDL_direct_statin_corrected",
     "SHBG",
     "Total_bilirubin",
     "Triglycerides",
@@ -47,6 +47,20 @@ PHENOTYPES = [
     "Neutrophill_count",
     "Red_blood_cell_erythrocyte_count",
 ]
+# PHENOTYPES = [  
+#   "Body_mass_index_BMI",
+#   "Glucose",
+#   "Vitamin_D",
+#   "Albumin",
+#   "Total_protein",
+#   "Cystatin_C",
+#   "Gamma_glutamyltransferase",
+#   "Alkaline_phosphatase",
+#   "Creatinine",
+#   "Whole_body_fat_free_mass", 
+#   "Forced_expiratory_volume_in_1_second_FEV1",
+#   "Glycated_haemoglobin_HbA1c"
+#   ]
 
 
 

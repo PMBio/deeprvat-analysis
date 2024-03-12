@@ -44,8 +44,9 @@ phenotype_renamer = c('WHR Body mass index BMI corrected' = 'WHR',
                       "IGF 1" = "IGF-1",
                       "Mean platelet thrombocyte volume" = "MPTV",
                       "MPTVS" = "MPTV",
-                      "Red blood cell erythrocyte count" = "Erythrocyte count")
-
+                      "Red blood cell erythrocyte count" = "Erythrocyte count",
+                      "Cholesterol statin corrected" = "Cholesterol",
+                      "LDL direct statin corrected" = "LDL direct")
 phenotype_renamer_rev = names(phenotype_renamer)
 names(phenotype_renamer_rev) = phenotype_renamer
 
@@ -275,7 +276,6 @@ checkResExistence = function(phenotypes, results_dir, results_dir_pattern = NA){
 }
 ############################################################ 
 
-
 ####################### Data functions ############################ 
 loadDeepRVATResults = function(results_dir, phenotypes, phenotype_renamer, results_dir_pattern = NA){
   results_list <- list()
@@ -292,7 +292,6 @@ loadDeepRVATResults = function(results_dir, phenotypes, phenotype_renamer, resul
   results <- bind_rows(results_list) %>%
     rename("Trait" = "phenotype") %>% 
     mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>%
-    mutate(Trait = gsub(statin_strings,"", Trait)) %>%
     filter(Method %in% main_methods)
 
   

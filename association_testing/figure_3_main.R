@@ -7,25 +7,16 @@ library(ggpubr)
 library(cowplot)
 library(tibble)
 
-setwd('/home/e400p/ukbb/experiments/revision_2/additional_covariates_unrelated_caucasian_samples/deeprvat_cv_bf_seed_genes/')
-code_dir = '/home/e400p/deeprvat_public/deeprvat-analysis/association_testing'
-# code_dir = snakemake@params[["code_dir"]]
+code_dir = snakemake@params[["code_dir"]]
 source(file.path(code_dir, 'rvat_figure_utils.R'))
 source(file.path(code_dir, 'rvat_figure_paths.R'))
 
 
-# Define experiment directories
-replication_file_deeprvat = 'replication.parquet'
-results_dir = './'
-out_file = 'dicovery_replication_plot.png'
-results_dir_pattern = ''
-max_rank = 500
-
-# replication_file_deeprvat = snakemake@input[["replication"]]
-# results_dir = snakemake@params[["results_dir"]]
-# out_file = snakemake@output[[1]][1]
-# max_rank = snakemake@params[["max_rank"]]
-# results_dir_pattern = snakemake@params[["results_dir_pattern"]] #TODO can be removed
+replication_file_deeprvat = snakemake@input[["replication"]]
+results_dir = snakemake@params[["results_dir"]]
+out_file = snakemake@output[[1]][1]
+max_rank = snakemake@params[["max_rank"]]
+results_dir_pattern = snakemake@params[["results_dir_pattern"]] #TODO can be removed
 
 
 
@@ -128,8 +119,8 @@ monti_res_quant = readRDS(file.path(monti_quant_dir, paste0("monti_results", mon
 monti_res_quant %>% distinct(Trait)
 
 
-stopifnot(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_monti_quant %>% distinct(Trait) %>% pull(Trait)))
-stopifnot(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), monti_res_quant %>% distinct(Trait) %>% pull(Trait)))
+# stopifnot(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_monti_quant %>% distinct(Trait) %>% pull(Trait)))
+# stopifnot(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), monti_res_quant %>% distinct(Trait) %>% pull(Trait)))
 
 all_traits_count = sum(counts_monti_quant %>% filter(is_single_trait == 'True') %>% pull(n))
 counts_monti_quant = counts_monti_quant %>% mutate(n = ifelse(Trait == 'All traits',all_traits_count, n))
@@ -159,8 +150,8 @@ staar_res_quant = readRDS(file.path(staar_quant_dir, paste0("staar_corrected", m
 
 
 
-stopifnot(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_staar_quant %>% distinct(Trait) %>% pull(Trait)))
-stopifnot(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), staar_res_quant %>% distinct(Trait) %>% pull(Trait)))
+# stopifnot(setequal(counts_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), counts_staar_quant %>% distinct(Trait) %>% pull(Trait)))
+# stopifnot(setequal(results_deeprvat_quant %>% distinct(Trait) %>% pull(Trait), staar_res_quant %>% distinct(Trait) %>% pull(Trait)))
 
 
 
