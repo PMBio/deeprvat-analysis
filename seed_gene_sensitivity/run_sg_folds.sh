@@ -21,7 +21,7 @@ done
 
 # RUN BASE EXP SEED GENE SELECTION ------------------------------------------
 cd ./base
-snakemake -j 1 --snakefile $deeprvat_dir/pipelines/training_association_testing.snakefile all_config
+snakemake -j 1 --snakefile $deeprvat_dir/pipelines/cv_training/cv_training_association_testing.snakefile all_config
 cd ../
 
 # RUN SEED GENE FOLD SELECTION ----------------------------------------------
@@ -30,7 +30,11 @@ python $deeprvat_analysis_dir/seed_gene_sensitivity/seed_gene_selection.py --fol
 
 # RUN ASSOCIATION TESTING PIPELINE ON EACH SEED GENE FOLD -------------------
 for fold in $(seq 0 $(($FOLDS - 1)) ); do
+    now="$(date)"
+    echo "Starting Fold $fold: $now"
     cd ./fold_$fold
-    snakemake -j 1 --snakefile $deeprvat_dir/pipelines/training_association_testing.snakefile -n
+    snakemake -j 1 --snakefile $deeprvat_dir/pipelines/cv_training/cv_training_association_testing.snakefile -n
     cd ../
+    now="$(date)"
+    echo "Finished Fold $fold: $now"
 done
