@@ -30,6 +30,6 @@ Mutagenesis experiment uses the original [models.py](https://github.com/PMBio/de
 
 ```bash
 	conda activate [deeprvat_environment]
-    cd [path_to_deeprvat-analysis]/feature_importance/mutagenesis
+	cd [path_to_deeprvat-analysis]/feature_importance/mutagenesis
 	snakemake -j 60 --snakefile mutate.snakefile --profile lsf.profile 
 ```

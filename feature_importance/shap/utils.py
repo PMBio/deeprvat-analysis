@@ -21,12 +21,16 @@ ANNO_COLOR_INDV_LIST =  ['#3182bd', '#6baed6',
 
 QUANT_COLOR_LIST =  ['#3182bd', '#6baed6',
                      '#b2723f', '#df880f',  '#8B4513', '#CD853F', '#D2691E', '#DEB887',
-                     '#99CCCC', '#99CCCC', '#99CCCC', '#99CCCC', '#08519c', '#08519c', 
+                     
+                     '#99CCCC', '#99CCCC', '#99CCCC', '#99CCCC', '#99CCCC', 
+                     
+                     '#08519c', '#08519c', 
                      '#08519c',  '#08519c', '#08519c', '#08519c', '#08519c', '#08519c',
                    
                      '#c68eb7', '#c68eb7',
                      #'#8370ab' , '#8370ab' 
                       ]
+
 
 
 #'#3182bd',  MAF
@@ -57,7 +61,13 @@ ANNOTATION_NAMES = ['combined_UKB_NFE_AF_MB', 'CADD_raw',
          'DeepRipe_plus_KHDRBS1_clip_k5', 'DeepRipe_plus_ELAVL1_parclip',
          'DeepRipe_plus_TARDBP_parclip','DeepRipe_plus_HNRNPD_parclip',
          'DeepRipe_plus_MBNL1_parclip', 'DeepRipe_plus_QKI_parclip',
-         'SpliceAI_delta_score']
+         'SpliceAI_delta_score', 'alphamissense']
+
+
+
+
+
+
 
 BINARY_ANNOTATION_CATEGORIES = { 
                           'Consequence_missense_variant': 'Protein function',
@@ -89,6 +99,7 @@ ANNOTATION_CATEGORIES = { 'combined_UKB_NFE_AF_MB': 'UKB MAF',
                           'polyphen_score' : 'Protein function', 
                           'PrimateAI_score': 'Protein function',
                           'condel_score' : 'Protein function', 
+                          'alphamissense': 'Protein function',
                           #'Consequence_protein_altering_variant': 'Protein function',
                          
                           'DeepRipe_plus_QKI_lip_hg2': 'RNA-binding',
@@ -134,6 +145,7 @@ ANNOTATION_CODES = {      'combined_UKB_NFE_AF_MB': 1,
                           'polyphen_score' : 9, 
                           'PrimateAI_score': 9,
                           'condel_score' : 9, 
+                          'alphamissense': 9,
                           #'Consequence_protein_altering_variant': 9,
                     
                           'DeepRipe_plus_QKI_lip_hg2': 10,
@@ -178,6 +190,7 @@ ANNOTATION_PRINT = { 'combined_UKB_NFE_AF_MB': 'UKB MAF',
                           'polyphen_score' : 'polyphen score', 
                           'PrimateAI_score': 'PrimateAI score',
                           'condel_score' : 'condel score', 
+                          'alphamissense': 'AlphaMissense score',
                     
                           #'Consequence_protein_altering_variant': 'protein altering variant',
                           #'Consequence_stop_lost': 'stop lost', 
