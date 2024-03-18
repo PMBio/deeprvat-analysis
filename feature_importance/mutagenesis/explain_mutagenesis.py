@@ -35,157 +35,215 @@ logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s: %(message)s',
                     stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-## TODO SET RANDOM SEED
 
-    
-class AggregateBagPredictions(pl.LightningDataModule):
-    def __init__(self,
-                 bag_ckpts):
-        
-        self.bag_ckpts = bag_ckpts
-        
-        
-    def forward(self, rare_variant_annotations, x_phenotypes):
-        preds = sum([ m(rare_variant_annotations, x_phenotypes)
-                  for m in self.bag_ckpts]) / len(self.bag_ckpts)
-        
-        return preds
-    
-    
-
-#### Multi Pheno Classes    
 class MultiphenoDataset(Dataset):
+    """
+    class used to structure the data and present a __getitem__ function to
+    the dataloader, that will be used to load batches into the model
+    """
+
     def __init__(
         self,
         # input_tensor: zarr.core.Array,
         # covariates: zarr.core.Array,
         # y: zarr.core.Array,
         data: Dict[str, Dict],
-        min_variant_count: int,
+        # min_variant_count: int,
         batch_size: int,
         split: str = "train",
         cache_tensors: bool = False,
+        temp_dir: Optional[str] = None,
+        chunksize: int = 1000,
         # samples: Optional[Union[slice, np.ndarray]] = None,
         # genes: Optional[Union[slice, np.ndarray]] = None
     ):
-        'Initialization'
+        """
+        Initialize the MultiphenoDataset.
+
+        :param data: Underlying dataframe from which data is structured into batches.
+        :type data: Dict[str, Dict]
+        :param min_variant_count: Minimum number of variants available for each gene.
+        :type min_variant_count: int
+        :param batch_size: Number of samples/individuals available in one batch.
+        :type batch_size: int
+        :param split: Contains a prefix indicating the dataset the model operates on. Defaults to "train". (optional)
+        :type split: str
+        :param cache_tensors: Indicates if samples have been pre-loaded or need to be extracted from zarr. (optional)
+        :type cache_tensors: bool
+        """
+
         super().__init__()
 
-        self.data = data
+        self.data = copy.deepcopy(data)
         self.phenotypes = self.data.keys()
         logger.info(
             f"Initializing MultiphenoDataset with phenotypes:\n{pformat(list(self.phenotypes))}"
         )
 
         self.cache_tensors = cache_tensors
+        if self.cache_tensors:
+            self.zarr_root = zarr.group()
+        elif temp_dir is not None:
+            temp_path = Path(resolve_path_with_env(temp_dir)) / "deeprvat_training"
+            temp_path.mkdir(parents=True, exist_ok=True)
+            self.input_tensor_dir = TemporaryDirectory(
+                prefix="training_data", dir=str(temp_path)
+            )
+            # Create root group here
+
+        self.chunksize = chunksize
+        if self.cache_tensors:
+            logger.info("Keeping all input tensors in main memory")
 
         for pheno, pheno_data in self.data.items():
-            if pheno_data["y"].shape == (
-                    pheno_data["input_tensor_zarr"].shape[0], 1):
+            if pheno_data["y"].shape == (pheno_data["input_tensor_zarr"].shape[0], 1):
                 pheno_data["y"] = pheno_data["y"].squeeze()
-            elif pheno_data["y"].shape != (
-                    pheno_data["input_tensor_zarr"].shape[0], ):
+            elif pheno_data["y"].shape != (pheno_data["input_tensor_zarr"].shape[0],):
                 raise NotImplementedError(
-                    'Multi-phenotype training is only implemented via multiple y files'
+                    "Multi-phenotype training is only implemented via multiple y files"
                 )
 
             if self.cache_tensors:
-                pheno_data["input_tensor"] = pheno_data["input_tensor_zarr"][:]
+                zarr.copy(
+                    pheno_data["input_tensor_zarr"],
+                    self.zarr_root,
+                    name=pheno,
+                    chunks=(self.chunksize, None, None, None),
+                    compressor=Blosc(clevel=1),
+                )
+                pheno_data["input_tensor_zarr"] = self.zarr_root[pheno]
+                # pheno_data["input_tensor"] = pheno_data["input_tensor_zarr"][:]
+            elif temp_dir is not None:
+                tensor_path = (
+                    Path(self.input_tensor_dir.name) / pheno / "input_tensor.zarr"
+                )
+                zarr.copy(
+                    pheno_data["input_tensor_zarr"],
+                    zarr.DirectoryStore(tensor_path),
+                    chunks=(self.chunksize, None, None, None),
+                    compressor=Blosc(clevel=1),
+                )
+                pheno_data["input_tensor_zarr"] = zarr.open(tensor_path)
 
-        self.min_variant_count = min_variant_count
+        # self.min_variant_count = min_variant_count
         self.samples = {
             pheno: pheno_data["samples"][split]
             for pheno, pheno_data in self.data.items()
         }
-        self.subset_samples()
+
+        # self.subset_samples()
 
         self.total_samples = sum([s.shape[0] for s in self.samples.values()])
 
         self.batch_size = batch_size
-
-        self.sample_order = pd.DataFrame({
-            "phenotype":
-            itertools.chain(*[[pheno] * len(self.samples[pheno])
-                              for pheno in self.phenotypes])
-        })
+        # index all samples and categorize them by phenotype, such that we
+        # get a dataframe repreenting a chain of phenotypes
+        self.sample_order = pd.DataFrame(
+            {
+                "phenotype": itertools.chain(
+                    *[[pheno] * len(self.samples[pheno]) for pheno in self.phenotypes]
+                )
+            }
+        )
         self.sample_order = self.sample_order.astype(
-            {"phenotype": pd.api.types.CategoricalDtype()})
-        self.sample_order = self.sample_order.sample(
-            n=self.total_samples)  # shuffle
-        self.sample_order["index"] = self.sample_order.groupby(
-            "phenotype").cumcount()
+            {"phenotype": pd.api.types.CategoricalDtype()}
+        )
+        self.sample_order = self.sample_order.sample(n=self.total_samples)  # shuffle
+        # phenotype specific index; e.g. 7. element total, 2. element for phenotype "Urate"
+        self.sample_order["index"] = self.sample_order.groupby("phenotype").cumcount()
 
     def __len__(self):
-        'Denotes the total number of batches'
+        "Denotes the total number of batches"
         return math.ceil(len(self.sample_order) / self.batch_size)
 
     def __getitem__(self, index):
-        'Generates one batch of data'
+        "Generates one batch of data"
 
+        # 1. grab min(batch_size, len(self)) from computed indices of self.phenotype_order
+        # 2. count phenotypes with np.unique
+        # 3. return that many samples from that phenotype
 
         start_idx = index * self.batch_size
         end_idx = min(self.total_samples, start_idx + self.batch_size)
         batch_samples = self.sample_order.iloc[start_idx:end_idx]
-        samples_by_pheno = batch_samples.groupby("phenotype")
+        samples_by_pheno = batch_samples.groupby("phenotype", observed=True)
 
-        # TODO: Use training genes
         result = dict()
         for pheno, df in samples_by_pheno:
+            # get phenotype specific sub-index
             idx = df["index"].to_numpy()
-            print(len(idx))
-            annotations = (
-                self.data[pheno]["input_tensor"][idx]
-                if self.cache_tensors else
-                self.data[pheno]["input_tensor_zarr"][idx, :, :, :])
+            assert np.array_equal(idx, np.arange(idx[0], idx[-1] + 1))
+            slice_ = slice(idx[0], idx[-1] + 1)
+
+            # annotations = (
+            #     self.data[pheno]["input_tensor"][slice_]
+            #     if self.cache_tensors
+            #     else self.data[pheno]["input_tensor_zarr"][slice_, :, :, :]
+            # )
+            annotations = self.data[pheno]["input_tensor_zarr"][slice_, :, :, :]
 
             result[pheno] = {
-                "indices": self.samples[pheno][idx],
-                "covariates": self.data[pheno]["covariates"][idx],
-                "rare_variant_annotations": annotations,
-                "y": self.data[pheno]["y"][idx]
+                "indices": self.samples[pheno][slice_],
+                "covariates": self.data[pheno]["covariates"][slice_],
+                "rare_variant_annotations": torch.tensor(annotations),
+                "y": self.data[pheno]["y"][slice_],
             }
 
- 
         return result
 
-    
-    def subset_samples(self):
-        for pheno, pheno_data in self.data.items():
-            # First sum over annotations (dim2) for each variant in each gene.
-            # Then get the number of non-zero values across all variants in all
-            # genes for each sample.
-            n_samples_orig = self.samples[pheno].shape[0]
-            input_tensor = pheno_data["input_tensor_zarr"][
-                self.samples[pheno], :, :, :]
-            logger.info(input_tensor.shape)
-            n_variants_per_sample = np.sum(np.sum(np.array(input_tensor), axis=2) != 0,
-                                           axis=(1, 2))
-            n_variant_mask = n_variants_per_sample >= self.min_variant_count
 
-            nan_mask = ~pheno_data["y"][self.samples[pheno]].isnan()
-            mask = n_variant_mask & nan_mask.numpy()
-            self.samples[pheno] = self.samples[pheno][mask]
+    def index_input_tensor_zarr(self, pheno: str, indices: np.ndarray):
+        # IMPORTANT!!! Never call this function after self.subset_samples()
 
-            logger.info(f"{pheno}: {self.samples[pheno].shape[0]} / "
-                        f"{n_samples_orig} samples kept")
-            
-            
-            
-    
+        x = self.data[pheno]["input_tensor_zarr"]
+        first_idx = indices[0]
+        last_idx = indices[-1]
+        slice_ = slice(first_idx, last_idx + 1)
+        arange = np.arange(first_idx, last_idx + 1)
+        z = x[slice_]
+        slice_indices = np.nonzero(np.isin(arange, indices))
+        return z[slice_indices]
+
+
 class MultiphenoBaggingData(pl.LightningDataModule):
+    """
+    Preprocess the underlying dataframe, to then load it into a dataset object
+    """
+
     def __init__(
-            self,
-            # input_tensor: torch.Tensor,
-            # covariates: torch.Tensor,
-            # y: torch.Tensor,
-            data: Dict[str, Dict],
-            train_proportion: float,
-            sample_with_replacement: bool = True,
-            min_variant_count: int = 1,
-            upsampling_factor: int = 1,  # NOTE: Changed
-            batch_size: Optional[int] = None,
-            num_workers: Optional[int] = 0,
-            cache_tensors: bool = False):
+        self,
+        data: Dict[str, Dict],
+        train_proportion: float,
+        sample_with_replacement: bool = True,
+        # min_variant_count: int = 1,
+        upsampling_factor: int = 1,
+        batch_size: Optional[int] = None,
+        num_workers: Optional[int] = 0,
+        pin_memory: bool = False,
+        cache_tensors: bool = False,
+        temp_dir: Optional[str] = None,
+        chunksize: int = 1000,
+    ):
+        """
+        Initialize the MultiphenoBaggingData.
+
+        :param data: Underlying dataframe from which data structured into batches.
+        :type data: Dict[str, Dict]
+        :param train_proportion: Percentage by which data is divided into training/validation split.
+        :type train_proportion: float
+        :param sample_with_replacement: If True, a sample can be selected multiple times in one epoch. Defaults to True. (optional)
+        :type sample_with_replacement: bool
+        :param min_variant_count: Minimum number of variants available for each gene. Defaults to 1. (optional)
+        :type min_variant_count: int
+        :param upsampling_factor: Percentual factor by which to upsample data; >= 1. Defaults to 1. (optional)
+        :type upsampling_factor: int
+        :param batch_size: Number of samples/individuals available in one batch. Defaults to None. (optional)
+        :type batch_size: Optional[int]
+        :param num_workers: Number of workers simultaneously putting data into RAM. Defaults to 0. (optional)
+        :type num_workers: Optional[int]
+        :param cache_tensors: Indicates if samples have been pre-loaded or need to be extracted from zarr. Defaults to False. (optional)
+        :type cache_tensors: bool
+        """
         logger.info("Intializing datamodule")
 
         super().__init__()
@@ -194,9 +252,9 @@ class MultiphenoBaggingData(pl.LightningDataModule):
             raise ValueError("upsampling_factor must be at least 1")
 
         self.data = data
+        # MODIFIED. COMMENTED OUT. 
         #self.n_genes = {
-        #    pheno: self.data[pheno]["genes"].shape[0]
-        #    for pheno in self.data.keys()
+        #    pheno: self.data[pheno]["genes"].shape[0] for pheno in self.data.keys()
         #}
 
         # Get the number of annotations and covariates
@@ -204,61 +262,143 @@ class MultiphenoBaggingData(pl.LightningDataModule):
         any_pheno_data = next(iter(self.data.values()))
         self.n_annotations = any_pheno_data["input_tensor_zarr"].shape[2]
         self.n_covariates = any_pheno_data["covariates"].shape[1]
+        
 
-        for pheno, pheno_data in self.data.items():
+        for _, pheno_data in self.data.items():
             n_samples = pheno_data["input_tensor_zarr"].shape[0]
             assert pheno_data["covariates"].shape[0] == n_samples
             assert pheno_data["y"].shape[0] == n_samples
 
-            samples = np.arange(n_samples)
-            
-            n_train_samples = round(n_samples * train_proportion)
-            rng = np.random.default_rng()
-            train_samples = np.sort(
-                            rng.choice(samples,
-                               size=n_train_samples,
-                               replace=sample_with_replacement))
-            
-            
-            self.data[pheno]["samples"] = {
-                    "train": train_samples,
-                     "val": np.setdiff1d(samples, train_samples)
+            # TODO: Rewrite this for multiphenotype data
+            self.upsampling_factor = upsampling_factor
+            if self.upsampling_factor > 1:
+                raise NotImplementedError("Upsampling is not yet implemented")
+
+                logger.info(
+                    f"Upsampling data with original sample number: {self.y.shape[0]}"
+                )
+                samples = self.upsample()
+                n_samples = self.samples.shape[0]
+                logger.info(f"New sample number: {n_samples}")
+            else:
+                samples = np.arange(n_samples)
+
+            # Sample self.n_samples * train_proportion samples with replacement
+            # for training, use all remaining samples for validation
+            if train_proportion == 1.0: ### MODIFIED.
+                train_samples = samples #self.samples
+                #self.val_samples = samples #self.samples
+                pheno_data["samples"] = {
+                    "train": train_samples
                 }
-                
-               
-        self.save_hyperparameters("min_variant_count", 
-                                  "batch_size",  "num_workers", "cache_tensors")
+            else:
+                n_train_samples = round(n_samples * train_proportion)
+                rng = np.random.default_rng()
+                # select training samples from the underlying dataframe
+                train_samples = np.sort(
+                    rng.choice(
+                        samples, size=n_train_samples, replace=sample_with_replacement
+                    )
+                )
+                # samples which are not part of train_samples, but in samples
+                # are validation samples.
+                pheno_data["samples"] = {
+                    "train": train_samples,
+                    "val": np.setdiff1d(samples, train_samples),
+                }
 
+        self.save_hyperparameters(
+            # "min_variant_count",
+            "train_proportion",
+            "batch_size",
+            "num_workers",
+            "pin_memory",
+            "cache_tensors",
+            "temp_dir",
+            "chunksize",
+        )
 
+    def upsample(self) -> np.ndarray:
+        """
+        does not work at the moment for multi-phenotype training. Needs some minor changes
+        to make it work again
+        """
+        unique_values = self.y.unique()
+        if unique_values.size() != torch.Size([2]):
+            raise ValueError(
+                "Upsampling is only supported for binary y, "
+                f"but y has unique values {unique_values}"
+            )
 
+        class_indices = [(self.y == v).nonzero(as_tuple=True)[0] for v in unique_values]
+        class_sizes = [idx.shape[0] for idx in class_indices]
+        minority_class = 0 if class_sizes[0] < class_sizes[1] else 1
+        minority_indices = class_indices[minority_class].detach().numpy()
+        rng = np.random.default_rng()
+        upsampled_indices = rng.choice(
+            minority_indices,
+            size=(self.upsampling_factor - 1) * class_sizes[minority_class],
+        )
+        logger.info(f"Minority class: {unique_values[minority_class]}")
+        logger.info(f"Minority class size: {class_sizes[minority_class]}")
+        logger.info(f"Increasing minority class size by {upsampled_indices.shape[0]}")
+
+        self.samples = upsampled_indices
 
     def train_dataloader(self):
+        """
+        trainning samples have been selected, but to structure them and make them load
+        as a batch they are packed in a dataset class, which is then wrapped by a
+        dataloading object.
+        """
+        logger.info(
+            "Instantiating training dataloader "
+            f"with batch size {self.hparams.batch_size}"
+        )
+
         dataset = MultiphenoDataset(
-            # self.train_tensor,
-            # self.covariates[self.train_samples, :],
-            # self.y[self.train_samples, :],
             self.data,
-            self.hparams.min_variant_count,
+            # self.hparams.min_variant_count,
             self.hparams.batch_size,
             split="train",
-            cache_tensors=self.hparams.cache_tensors)
-        return DataLoader(dataset,
-                          batch_size=None,
-                          num_workers=self.hparams.num_workers)
+            cache_tensors=self.hparams.cache_tensors,
+            temp_dir=self.hparams.temp_dir,
+            chunksize=self.hparams.chunksize,
+        )
+        return DataLoader(
+            dataset,
+            batch_size=None,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+        )
 
     def val_dataloader(self):
+        """
+        validation samples have been selected, but to structure them and make them load
+        as a batch they are packed in a dataset class, which is then wrapped by a
+        dataloading object.
+        """
+        logger.info(
+            "Instantiating validation dataloader "
+            f"with batch size {self.hparams.batch_size}"
+        )
         dataset = MultiphenoDataset(
-            # self.val_tensor,
-            # self.covariates[self.val_samples, :],
-            # self.y[self.val_samples, :],
             self.data,
-            self.hparams.min_variant_count,
-            self.hparams.batch_size,
+            # self.hparams.min_variant_count,
+            self.hparams.batch_size, 
             split="val",
-            cache_tensors=self.hparams.cache_tensors)
-        return DataLoader(dataset,
-                          batch_size=None,
-                          num_workers=self.hparams.num_workers)
+            cache_tensors=self.hparams.cache_tensors,
+            temp_dir=self.hparams.temp_dir,
+            chunksize=self.hparams.chunksize,
+        )
+        return DataLoader(
+            dataset,
+            batch_size=None,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+        )
+    
+
     
 @click.group()
 def cli():
@@ -345,10 +485,10 @@ def compute_model_predictions(config,
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     
-    per_pheno_diff = {p:{} for p in config['phenotypes'].keys()}
+    per_pheno_diff = {p:{} for p in config['training']['phenotypes']}
 
         
-    for pheno in config['phenotypes'].keys():
+    for pheno in config['training']['phenotypes']:
         
         if os.path.exists(f'{input_dir}/{pheno}'):
             logging.info(f'Loading data for = {pheno}.')
@@ -426,9 +566,9 @@ def compute_model_predictions(config,
 
                     dm_wt = MultiphenoBaggingData( 
                              wildtype_data, 
-                             train_proportion = 1,
+                             train_proportion = 1, 
                              sample_with_replacement = True,
-                             min_variant_count = 1,
+                             #min_variant_count = 1,
                              upsampling_factor = 1,  
                              batch_size = 128
                             )
@@ -437,7 +577,7 @@ def compute_model_predictions(config,
                              mutated_data, 
                              train_proportion = 1,
                              sample_with_replacement = True,
-                             min_variant_count = 1,
+                             #min_variant_count = 1,
                              upsampling_factor = 1,  
                              batch_size = 128
                             )
@@ -499,4 +639,3 @@ if __name__ == '__main__':
    
     
    
-    
