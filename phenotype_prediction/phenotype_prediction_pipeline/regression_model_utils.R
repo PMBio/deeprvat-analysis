@@ -56,12 +56,13 @@ LoadYData <- function(this_out_dir, splits = c("train", "test")) {
     return(y_data)
 }
 
-LoadDataForModel <- function(y_data, covariate_cols, phenotype_col, top_q, this_out_dir, method, key_1, key_2, splits = c("train", "test"), genes_to_keep = NULL, use_top_q = TRUE) {
+LoadDataForModel <- function(y_data, covariate_cols, phenotype_col, top_q, this_out_dir, btype, gene_list, splits = c("train", "test"), genes_to_keep = NULL, use_top_q = TRUE) {
 
 
     data_list = list()
     for (split in splits) {
-        x_file_path <- paste0(this_out_dir, "/", split, "-", method, "-", key_1, "-", key_2, "-", "x.parquet")
+        x_file_path <- paste0(this_out_dir, "/", split, "-", btype, "-", gene_list, "-", "x.parquet")
+        print(x_file_path)
         this_x_data = read_parquet(x_file_path)
         if (split == "train") {
             gene_cols <- colnames(this_x_data)[grep("^gene_", colnames(this_x_data))]
@@ -153,12 +154,12 @@ FitLogisticModel <- function(data_list, all_x_cols, upsample = TRUE, use_weight 
 }
 
 
-PredictPhenoBaseline <- function(y_data, covariate_cols, phenotype_col, this_out_dir, top_q, gene_lists, vtypes = c("plof", "missense"), genes_to_keep = NULL, use_top_q = TRUE) {
+PredictPhenoBaseline <- function(y_data, covariate_cols, phenotype_col, this_out_dir, top_q, gene_lists, btypes = c("plof", "missense"), genes_to_keep = NULL, use_top_q = TRUE) {
     log_info("Fitting Phenotype model for Baseline")
     all_res_list = list()
     all_models_list = list()
-    for (vtype in vtypes) {
-        all_models_list[[vtype]] = list()
+    for (btype in btypes) {
+        all_models_list[[btype]] = list()
         inner_list = list()
         for (gene_list in gene_lists) {
             # this_genes_to_keep = ifelse(is.null(genes_to_keep), NULL, list(genes_to_keep[[gene_list]]))
@@ -167,13 +168,13 @@ PredictPhenoBaseline <- function(y_data, covariate_cols, phenotype_col, this_out
             } else {
                 this_genes_to_keep = list(genes_to_keep[[gene_list]])
             }
-            all_model_data = LoadDataForModel(y_data, covariate_cols = covariate_cols, phenotype_col = phenotype_col, top_q = top_q, this_out_dir = this_out_dir, method = "baseline", key_1 = vtype, key_2 = gene_list, genes_to_keep = this_genes_to_keep, use_top_q = use_top_q)
+            all_model_data = LoadDataForModel(y_data, covariate_cols = covariate_cols, phenotype_col = phenotype_col, top_q = top_q, this_out_dir = this_out_dir, btype = btype, gene_list = gene_list, genes_to_keep = this_genes_to_keep, use_top_q = use_top_q)
             data_list = all_model_data[["data_list"]]
             all_x_cols = all_model_data[["all_x_cols"]]
-            model_output = FitLogisticModel(data_list, all_x_cols, use_weight = FALSE, model_name = paste("baseline", vtype, gene_list, sep = "-"))
+            model_output = FitLogisticModel(data_list, all_x_cols, use_weight = FALSE, model_name = paste(btype, gene_list, sep = "-"))
 
             all_res_list = append(all_res_list, list(model_output[["res"]]))
-            all_models_list[[vtype]][[gene_list]] = model_output[["model"]]
+            all_models_list[[btype]][[gene_list]] = model_output[["model"]]
 
         }
     }
@@ -181,47 +182,11 @@ PredictPhenoBaseline <- function(y_data, covariate_cols, phenotype_col, this_out
     return(all_res_list)
 }
 
-PredictPhenoDeepRVAT <- function(y_data, covariate_cols, phenotype_col, this_out_dir, top_q, gene_lists, n_deeprvat_repeats = 6, genes_to_keep = NULL, use_top_q = TRUE) {
-    log_info("Fitting Phenotype model for DeepRVAT")
-    all_res_list = list()
-    all_models_list = list()
-    for (gene_list in gene_lists) {
-        log_info("Fitting model for gene_list {gene_list}")
-        all_models_list[[gene_list]] = list()
-        estimate_list = list()
-        # this_genes_to_keep = ifelse(is.null(genes_to_keep), NULL, list(genes_to_keep[[gene_list]]))
-
-        if (is.null(genes_to_keep)) {
-            this_genes_to_keep = NULL
-        } else {
-            this_genes_to_keep = list(genes_to_keep[[gene_list]])
-        }
-
-        for (deeprvat_repeat in seq(0, n_deeprvat_repeats - 1)) {
-            all_model_data = LoadDataForModel(y_data, covariate_cols = covariate_cols, phenotype_col = phenotype_col, top_q = top_q, this_out_dir = this_out_dir, method = "deeprvat", key_1 = gene_list, key_2 = deeprvat_repeat, genes_to_keep = this_genes_to_keep, use_top_q = use_top_q)
-            data_list = all_model_data[["data_list"]]
-            all_x_cols = all_model_data[["all_x_cols"]]
-            model_output = FitLogisticModel(data_list, all_x_cols, use_weight = FALSE, model_name = paste("deeprvat", gene_list, sep = "-"))
-            estimate_list = append(estimate_list, list(model_output[["res"]][["res"]][["estimate"]]))
-            all_models_list[[gene_list]][[as.character(deeprvat_repeat)]] = model_output[["model"]]
-        }
-
-        avg_estimate = rowMeans(do.call(cbind, estimate_list))
-
-        avg_model = EvalLogisticModel(avg_estimate, model_output[["res"]][["res"]][["truth"]], model_output[["res"]][["res"]][["Y"]], plot_title = "average deeprvat repeats")
-        # add model name column
-        avg_model = mapply(cbind, avg_model, model_name = paste("deeprvat", gene_list, sep = "-"), SIMPLIFY = F)
-
-        all_res_list = append(all_res_list, list(avg_model))
-    }
-    all_res_list = FlattenDfList(all_res_list)
-    return(all_res_list)
-}
 
 PredictPhenoCovariates <- function(y_data, covariate_cols, phenotype_col, this_out_dir, top_q, use_top_q = TRUE) {
     log_info("Fitting Phenotype model for covariates only")
-
-    all_model_data = LoadDataForModel(y_data, covariate_cols = covariate_cols, phenotype_col = phenotype_col, top_q = top_q, this_out_dir = this_out_dir, method = "deeprvat", key_1 = "baseline_only", key_2 = "1", use_top_q = use_top_q)  #can basically use any combination of method, key_1, key_2 since the covariates are all the same
+    # use any btype here just to get the covariates
+    all_model_data = LoadDataForModel(y_data, covariate_cols = covariate_cols, phenotype_col = phenotype_col, top_q = top_q, this_out_dir = this_out_dir, btype = "deeprvat", gene_list = "baseline_only", use_top_q = use_top_q)  #can basically use any combination of method, key_1, key_2 since the covariates are all the same
 
     data_list = all_model_data[["data_list"]]
     all_x_cols = all_model_data[["all_x_cols"]]

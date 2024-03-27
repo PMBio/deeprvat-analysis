@@ -153,7 +153,10 @@ def get_burden(
     logger.info(f"burdens after summing shape: {burdens.shape}")
     if btype == "plof":
         burdens[burdens > 0] = 1
-    burdens = np.max(burdens, axis=2)  # sum burden variants for each gene
+    if btype == 'sift':
+        burdens = np.min(burdens, axis=2) 
+    else:
+        burdens = np.max(burdens, axis=2)  # sum burden variants for each gene
     logger.info(f"burdens after maxing shape: {burdens.shape}")
     y = batch["y"]
     x = batch["x_phenotypes"]
