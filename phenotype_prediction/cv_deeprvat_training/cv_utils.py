@@ -39,100 +39,51 @@ module_folder_dict = {
 @cli.command()
 @click.option("--module", "-m", multiple=True)
 @click.option("--fold", type=int)
-@click.option("--correction-method", type=str, default="FDR")
-@click.option("--n-training-genes", type=int, default=40)
+@click.option("--n-folds", type=int, default=5)
 @click.argument("input_config", type=click.Path(exists=True))
 @click.argument("out_path", type=click.Path(), default="./")
 def spread_config(
-    input_config,
-    out_path,
-    module,
-    fold,
-    correction_method,
-    n_training_genes,
+    input_config, out_path, module, fold, n_folds
 ):
     data_modules = module
 
     with open(input_config) as f:
         config_template = yaml.safe_load(f)
+    split = "train"
+    cv_path = f"{config_template['cv_path']}/{n_folds}_fold"
+    for module in data_modules:
+        config = copy.deepcopy(config_template)
+        data_slots = DATA_SLOT_DICT[module]
+        for data_slot in data_slots:
+            sample_file = f"{cv_path}/samples_{split}{fold}.pkl"
+            logger.info(f"setting sample file {sample_file}")
+            config[data_slot]["dataset_config"]["sample_file"] = sample_file
 
-    association_maf = config_template.get("association_testing_maf", 0.001)
-    logger.info(
-        f"MAF used in association testing for DeepRVAT and baseline: {association_maf} "
-    )
-    for split in ["train"]:
-        for module in data_modules:
-            config = copy.deepcopy(config_template)
-            # data_slots = ['data', 'training_data'] if module == 'deeprvat' else ['data']
-            data_slots = DATA_SLOT_DICT[module]
-            for data_slot in data_slots:
-                annotations = config[module][data_slot]["dataset_config"]["annotations"]
-                af_pattern = re.compile(r".*(_MAF|_AF)\b")
-                rare_maf_col = [s for s in annotations if af_pattern.match(s)]
-                print(rare_maf_col)
-                assert len(rare_maf_col) == 1
-                rare_maf_col = rare_maf_col[0]
-                print(rare_maf_col)
-                config[module][data_slot][
-                    "gt_file"
-                ] = f"cv_data/genotypes_{split}{fold}.h5"
-                config[module][data_slot]["dataset_config"][
-                    "phenotype_file"
-                ] = f"cv_data/genotypes_{split}{fold}_phenotypes.parquet"
-                # if module == 'baseline':
-                #     config[module]['rare_maf'] = association_maf
-                if (module == "deeprvat") | (module == "deeprvat_pretrained"):
-                    logger.info("writing phenotype config")
-                    config[module]["phenotypes"] = {
-                        phenotype: {
-                            "correction_method": correction_method,
-                            "n_training_genes": n_training_genes,
-                        }
-                        for phenotype in config["phenotypes"]
-                    }
-                    if data_slot == "data":
-                        config[module][data_slot]["dataset_config"]["min_common_af"][
-                            rare_maf_col
-                        ] = association_maf
-                        config[module][data_slot]["dataset_config"]["rare_embedding"][
-                            "config"
-                        ]["thresholds"][
-                            rare_maf_col
-                        ] = f"{rare_maf_col} < {association_maf} and {rare_maf_col} > 0"
-                    logger.info("Writing baseline directories")
-                    baseline_base_path = f"{os.getcwd()}/cv_split{fold}/baseline"
-                    logger.info(f"Setting baseline path to {baseline_base_path}")
-                    config[module]["baseline_results"] = [
-                        {"base": baseline_base_path, "type": test_name}
-                        for test_name in [
-                            "plof/burden",
-                            "plof/skat",
-                            "missense/burden",
-                            "missense/skat",
-                        ]
-                    ]
-                    logger.info(config[module]["baseline_results"])
-            logger.info(f"Writing config for module {module}")
-            split_suffix = "_test" if split == "test" else ""
-            with open(f"{out_path}/{module_folder_dict[module]}/config{split_suffix}.yaml","w") as f:
-                yaml.dump(config[module], f)
+        if (module == "deeprvat") | (module == "deeprvat_pretrained"):
+            logger.info("Writing baseline directories")
+            old_baseline = copy.deepcopy(config["baseline_results"])
+            logger.info(config["baseline_results"])
+        logger.info(f"Writing config for module {module}")
+        with open(f"{out_path}/{module_folder_dict[module]}/config.yaml", "w") as f:
+            yaml.dump(config, f)
+
 
 
 
 @cli.command()
-@click.option("-m", "--module", type=str, default="deeprvat")
 @click.option("--fold", type=int)
+@click.option("--n-folds", type=int, default=5)
 @click.argument("input_config", type=click.Path(exists=True))
 @click.argument("out_file", type=click.Path())
-def generate_test_config(input_config, out_file, module, fold):
+def generate_test_config(input_config, out_file, fold, n_folds):
     with open(input_config) as f:
         config = yaml.safe_load(f)
+    cv_path = f"{config['cv_path']}/{n_folds}_fold"
     split = "test"
-    for data_slot in DATA_SLOT_DICT[module]:
-        config[data_slot]["gt_file"] = f"cv_data/genotypes_{split}{fold}.h5"
-        config[data_slot]["dataset_config"][
-            "phenotype_file"
-        ] = f"cv_data/genotypes_{split}{fold}_phenotypes.parquet"
+    sample_file = f"{cv_path}/samples_{split}{fold}.pkl"
+    logger.info(f"setting sample file {sample_file}")
+    for data_slot in DATA_SLOT_DICT["deeprvat"]:
+        config[data_slot]["dataset_config"]["sample_file"] = sample_file
     with open(out_file, "w") as f:
         yaml.dump(config, f)
 

@@ -50,7 +50,7 @@ phenotype_col = all_column_names[["phenotype_col"]]
 log_info(paste("covariate_cols from GetColNames:", paste(covariate_cols, collapse = ", ")))
 
 
-rare_burden_res = PredictPhenoBaseline(y_data, covariate_cols, phenotype_col, this_input_dir, top_q, gene_lists = gene_lists, btypes = btypes, genes_to_keep = this_top_genes_to_keep, use_top_q = use_top_q)
+rare_burden_res = PredictPhenoRareBurden(y_data, covariate_cols, phenotype_col, this_input_dir, top_q, gene_lists = gene_lists, btypes = btypes, genes_to_keep = this_top_genes_to_keep, use_top_q = use_top_q)
 
 covarites_only_res = PredictPhenoCovariates(y_data, covariate_cols, phenotype_col, this_input_dir, top_q, use_top_q = use_top_q)
 

@@ -47,15 +47,15 @@ def add_corrected_phenotype_cols(
     )
     
     # comment this back in !!! 
-    # logger.info("adding quantile transformed phenotype")
-    # prs_with_pheno[f"{phenotype}_qt"] = my_quantile_transform(prs_with_pheno[phenotype])
-    # this_phenotype_df[f"{phenotype}_qt"] = my_quantile_transform(
-    #     this_phenotype_df[phenotype]
-    # )
+    logger.info("adding quantile transformed phenotype")
+    prs_with_pheno[f"{phenotype}_qt"] = my_quantile_transform(prs_with_pheno[phenotype])
+    this_phenotype_df[f"{phenotype}_qt"] = my_quantile_transform(
+        this_phenotype_df[phenotype]
+    )
     res_dict = {}
     logger.info("Computing residual phenotypes")
-    # for phenotype_suffix in ["", "_qt"]:     # comment this back in !!! 
-    for phenotype_suffix in [""]:
+    for phenotype_suffix in ["", "_qt"]:     # comment this back in !!! 
+    # for phenotype_suffix in [""]:
         phenotype_col = f"{phenotype}{phenotype_suffix}"
         res_dict[phenotype_col] = {}
 
@@ -193,7 +193,6 @@ def prep_r_regression_data(
         with open(file, 'rb') as f:
             this_samples = pickle.load(f)
             logger.info(f'Number of {split} samples: {len(this_samples)}')
-            import ipdb; ipdb.set_trace()
             this_samples = list(set(this_samples).intersection(set(this_phenotype_df.index)).intersection(set(prs_df.dropna().index)))
             logger.info(f'Number of {split} samples after intersecting for samples with non-na pheno values: {len(this_samples)}')
             sample_dict[split] = this_samples

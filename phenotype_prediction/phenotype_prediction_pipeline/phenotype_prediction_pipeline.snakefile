@@ -62,6 +62,15 @@ burden_phenotype = phenotypes[0]
 rule all_phenotype_prediction:
     input:
         expand(
+            "models/logistic_models/plotting_data/combined_metrics_{phenotype_suffix}.Rds",
+            phenotype_suffix=phenotype_suffixes,
+        ),
+        expand(
+            "models/linear_models/plotting_data/all_recomputed_metrics_test_{phenotype_suffix}.Rds",
+            phenotype_suffix=phenotype_suffixes,
+
+        ),
+        expand(
             "models/linear_models/plotting_data/replication_in_extreme/ranked_df_combined_{outlier_mode}_{extreme_quantile}_{phenotype_suffix}.Rds",
             phenotype_suffix=phenotype_suffixes,
             outlier_mode=["both", "bottomq", "topq"],
@@ -73,15 +82,7 @@ rule all_phenotype_prediction:
             quantile=[0.99, 0.999],
 
         ),
-        expand(
-            "models/linear_models/plotting_data/all_recomputed_metrics_test_{phenotype_suffix}.Rds",
-            phenotype_suffix=phenotype_suffixes,
 
-        ),
-        expand(
-            "models/logistic_models/plotting_data/combined_metrics_{phenotype_suffix}.Rds",
-            phenotype_suffix=phenotype_suffixes,
-        ),
 
 
 rule replication_in_extremes_plot:
@@ -298,8 +299,6 @@ rule prep_data_for_r:
         config="config_eval.yaml",
         samples_test='train_test_samples/test_samples.pkl',
         samples_train='train_test_samples/train_samples.pkl',
-        # dataset_train="cv_split{cvsplit}/deeprvat/{phenotype}/deeprvat/association_dataset.pkl",
-        # dataset_test="cv_split{cvsplit}/deeprvat/{phenotype}/deeprvat/association_dataset_test.pkl",
         discoveries="discoveries/all_significant.parquet",
     output:
         "r_data/{phenotype}/data.finished",
@@ -307,7 +306,7 @@ rule prep_data_for_r:
         # dataset_dir="cv_split{cvsplit}/deeprvat/{phenotype}/deeprvat/",
         burdens_dir="burdens",
         out_dir="r_data/{phenotype}",
-        burden_types=[f"--burden-type {b} " for b in btypes],
+        burden_types=[f"--burden-type {b} " for b in burden_btypes],
     resources:
         mem_mb=64000,
         load=16000,

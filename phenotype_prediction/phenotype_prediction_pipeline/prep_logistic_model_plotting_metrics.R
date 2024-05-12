@@ -13,7 +13,6 @@ phenotype_suffix = snakemake@params[["phenotype_suffix"]]
 top_bottom_q_vals = snakemake@params[["top_bottom_q_vals"]]
 top_quantiles = snakemake@params[["top_quantiles"]]
 out_dir = snakemake@params[["out_dir"]]
-code_dir = snakemake@params[["code_dir"]]
 log_info("Analysing {length(phenotypes)} phenotypes")
 
 

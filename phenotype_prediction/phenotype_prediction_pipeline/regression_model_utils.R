@@ -112,7 +112,6 @@ EvalLogisticModel <- function(fitted_results, truth, y_true_cont, plot_title = "
     fitted_results_bin <- ifelse(fitted_results > decision_threshold, 1, 0)
     this_res = tibble(estimate = fitted_results, estimate_bin = as.factor(fitted_results_bin), truth = as.factor(truth), Y = y_true_cont)
 
-    class_and_probs_metrics <- metric_set(roc_auc, pr_auc, accuracy, f_meas)
     class_and_probs_metrics <- metric_set(roc_auc, pr_auc)
 
     this_metrics = this_res %>%
@@ -130,7 +129,6 @@ FitLogisticModel <- function(data_list, all_x_cols, upsample = TRUE, use_weight 
     model_formula = paste0("y_bin ~ ", paste(all_x_cols, collapse = " + "))
     # print(paste0('Model formula: ', model_formula))
     model_data = data_list[["train"]][["model_data"]]
-
     if (upsample) {
         model_data = upsample(model_data, "y_bin")
         # print(paste0('Upsampling data ', nrow(model_data)))
@@ -154,8 +152,8 @@ FitLogisticModel <- function(data_list, all_x_cols, upsample = TRUE, use_weight 
 }
 
 
-PredictPhenoBaseline <- function(y_data, covariate_cols, phenotype_col, this_out_dir, top_q, gene_lists, btypes = c("plof", "missense"), genes_to_keep = NULL, use_top_q = TRUE) {
-    log_info("Fitting Phenotype model for Baseline")
+PredictPhenoRareBurden <- function(y_data, covariate_cols, phenotype_col, this_out_dir, top_q, gene_lists, btypes = c("plof", "missense"), genes_to_keep = NULL, use_top_q = TRUE) {
+    log_info("Fitting Phenotype model for Rare burden")
     all_res_list = list()
     all_models_list = list()
     for (btype in btypes) {

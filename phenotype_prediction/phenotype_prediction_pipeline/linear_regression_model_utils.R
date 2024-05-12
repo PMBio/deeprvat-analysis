@@ -58,8 +58,8 @@ EvalModel <- function(fitted_results, truth, y_true_cont, plot_title = "", decis
 }
 
 
-PredictPhenoBaselineLinear <- function(y_data, covariate_cols, phenotype_col, this_out_dir, top_q, gene_lists, btypes = c("plof", "missense"), genes_to_keep = NULL) {
-    log_info("Fitting Phenotype model for Baseline")
+PredictPhenoRareBurdenLinear <- function(y_data, covariate_cols, phenotype_col, this_out_dir, top_q, gene_lists, btypes = c("plof", "missense"), genes_to_keep = NULL) {
+    log_info("Fitting Phenotype model for Rare burden")
     all_res_list = list()
     all_models_list = list()
     for (btype in btypes) {
@@ -82,9 +82,7 @@ PredictPhenoBaselineLinear <- function(y_data, covariate_cols, phenotype_col, th
             all_models_list[[btype]][[gene_list]] = model_output[["model"]]
 
         }
-        # names(inner_list) = gene_lists all_res_list = append(all_res_list, list(inner_list))
     }
-    # model_name_save = paste('baseline', phenotype_col, top_q, rank, sep = '-') saveRDS(all_models_list, paste0(data_dir, '/markdown_data/logistic_models/', model_name_save, '.Rds'))
     all_res_list = FlattenDfList(all_res_list)
     return(all_res_list)
 }
