@@ -827,7 +827,7 @@ def run_association(
     logger.info("Grouping variants by gene")
     exploded_annotations = (
         dataset.annotation_df.query("id in @all_variants")
-        .explode('gene_ids').reset_index()
+        .explode('gene_id').reset_index()
         .drop_duplicates()
         .set_index('id')
     )     
@@ -841,13 +841,17 @@ def run_association(
         logger.info(
             f"Loading amino acid positions from file {variant_to_aa_map_file} and merging with exploded annotations"
         )
+        
         variant_to_aa_map = pd.read_parquet(variant_to_aa_map_file)
+        if not 'gene_id' in variant_to_aa_map.columns:
+            variant_to_aa_map = variant_to_aa_map.rename(columns = {'gene_ids' : 'gene_id'})
+
         exploded_annotations = (
             exploded_annotations.reset_index("id")
             .merge(
                 variant_to_aa_map,
                 how="left",
-                on=["pos", "chrom", "gene_ids"],
+                on=["pos", "chrom", "gene_id"],
                 validate="m:1",
             )
             .set_index("id")
@@ -863,10 +867,10 @@ def run_association(
         exploded_annotations.loc[
             exploded_annotations["Protein_position"].isna(), "Protein_position"
         ] = pos_dummies
-    grouped_annotations = exploded_annotations.groupby("gene_ids")
+    grouped_annotations = exploded_annotations.groupby("gene_id")
     gene_ids = pd.read_parquet(dataset.gene_file, columns=["id"])["id"].to_list()
     gene_ids = list(
-        set(gene_ids).intersection(set(exploded_annotations["gene_ids"].unique()))
+        set(gene_ids).intersection(set(exploded_annotations["gene_id"].unique()))
     )
 
     logger.info(f"Number of genes to test: {len(gene_ids)}")
