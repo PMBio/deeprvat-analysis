@@ -19,21 +19,21 @@ combine_pvals = snakemake@params[["combine_pvals"]]
 combine_pvals = ifelse(length(combine_pvals) == 0 | is.null(combine_pvals), "bonferroni", combine_pvals)
 print(sprintf("using p-value correction method %s", correction_method))
 
-source(file.path(code_dir, "../../utils.R"))  #get phenotype renamer
+source(file.path(code_dir, "../../phenotypes.R"))  #get phenotype renamer
+
 source(file.path(code_dir, "../utils.R"))  #p-value combination functions 
 
-# query_phenotypes = OLD_PHENOTYPES #TODO delete this, only for testing
+print(cat("Analyzing results for phenotypes:", query_phenotypes))
 
-print(paste("Analyzing results for phenotypes:", query_phenotypes))
 
-phenotypes_map = gsub("_", " ", query_phenotypes)
-names(phenotypes_map) = query_phenotypes
-to_add <- query_phenotypes[!(query_phenotypes %in% names(phenotypes_deeprvat))]
-phenotypes_deeprvat <- c(phenotypes_deeprvat, mapply(function(name, value) setNames(list(value), name), to_add, phenotypes_map[to_add]))
 alpha = 0.05
+phenotype_renamer_rev = names(quant_phenotypes) #from phenotypes.R
+names(phenotype_renamer_rev) = quant_phenotypes
+phenotype_renamer_rev = c(phenotype_renamer_rev, "LDL_direct" = "LDL direct",
+                 "Cholesterol" = "Cholesterol") #to rename the comparison results which don't have 'statin corrected' in them
+
+
 all_staar_res = tibble()
-
-
 for (pheno in query_phenotypes) {
     for (mask in masks) {
         pheno_name = ifelse(pheno == "IGF_1", "IGF-1", pheno)
@@ -65,8 +65,9 @@ pheno_col = "Trait"
 
 print(colnames(all_staar_res))
 all_staar_res = all_staar_res %>%
-    mutate(Trait = recode(phenotype, !!!phenotypes_deeprvat)) %>%
-    filter(EAC >= eac_threshold)
+    mutate(Trait = recode(phenotype, !!!phenotype_renamer_rev)) %>%
+    mutate(Trait = gsub('_', ' ', gsub('Jurgens_', '', Trait))) %>% # for the binary traits
+    filter(EAC >= eac_threshold) 
 
 print("aggregating pvals to gene level")
 print(all_staar_res %>%
@@ -110,10 +111,13 @@ saveRDS(staar_corrected, file.path(dirname(out_path), paste0("staar_corrected", 
 saveRDS(sig_counts_staar, file.path(dirname(out_path), paste0("sig_counts_staar", phenotype_suffix, ".Rds")))
 write_parquet(sig_counts_staar, file.path(dirname(out_path), paste0("sig_counts_staar", phenotype_suffix, ".parquet")))
 
+if (any(grepl("Jurgens", query_phenotypes))){
+  stop("Analysing binary traits. Not computing replication", call. = FALSE)
+}
 comparison <- read_parquet(file.path(code_dir, "../../data/comparison_results.parquet")) %>%
     mutate(in_comparison = TRUE) %>%
     mutate(Trait = str_remove(phenotype, "_standardized")) %>%
-    mutate(Trait = recode(Trait, !!!phenotypes_deeprvat)) %>%
+    mutate(Trait = recode(Trait, !!!phenotype_renamer_rev)) %>%
     rename(phenotype_standardized = phenotype) %>%
     mutate(phenotype = gsub("_standardized", "", phenotype_standardized))
 
@@ -181,7 +185,7 @@ replication_staar = add_replication(all_staar_res, comparison %>%
     mutate(Method = "STAAR") %>%
     select(Rank, Replicated, Significant, Method, Trait, gene) %>%
     # mutate(exp_name = 'STAAR') %>%
-as_tibble()
+    as_tibble()
 
 print("Saving output")
 out_file = str_split(out_path, "\\.")[[1]][1]

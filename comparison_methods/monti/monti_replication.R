@@ -20,28 +20,22 @@ print(combine_pvals)
 print(sprintf('combining pvals with: %s', combine_pvals))
 print(sprintf('using p-value correction method %s', correction_method))
 
-# source('~/deeprvat_public/deeprvat-analysis/comparison_methods/monti/monti_debug.R')
 
-source(file.path(code_dir, "../../utils.R"))  #get phenotype renamer
-source(file.path(code_dir, "../utils.R"))  #p-value combination functions 
+source(file.path(code_dir, "../utils.R"))  #p-value combination functions\
+source(file.path(code_dir, "../../phenotypes.R"))  #p-value combination functions 
 
 print(paste("Analyzing results for phenotypes:", query_phenotypes))
 
-phenotypes_map = gsub("_", " ", query_phenotypes)
-names(phenotypes_map) = query_phenotypes
-to_add <- query_phenotypes[!(query_phenotypes %in% names(phenotypes_deeprvat))]
-phenotypes_deeprvat <- c(phenotypes_deeprvat, mapply(function(name, value) setNames(list(value), name),
-                                                     to_add, phenotypes_map[to_add]))
-
-print(paste('phenotype map', phenotypes_deeprvat))
+phenotype_renamer_rev = names(quant_phenotypes) #from phenotypes.R
+names(phenotype_renamer_rev) = quant_phenotypes
+phenotype_renamer_rev = c(phenotype_renamer_rev, "LDL_direct" = "LDL direct",
+                          "Cholesterol" = "Cholesterol") #to rename the comparison results which don't have 'statin corrected' in them
 
 
-comparison <- read_parquet(file.path(code_dir, "../../data/comparison_results.parquet")) %>%
-  mutate(in_comparison = TRUE) %>%
-  mutate(Trait = str_remove(phenotype, "_standardized")) %>%
-  mutate(Trait = recode(Trait, !!!phenotypes_deeprvat)) %>%
-  rename(phenotype_standardized = phenotype) %>%
-  mutate(phenotype = gsub("_standardized", "", phenotype_standardized))
+print(paste('phenotype map', phenotype_renamer_rev))
+
+
+
 
 ReadResultTables2 <- function(phenotypes) {
   all_baseline_res = tibble()
@@ -79,7 +73,7 @@ pval_thres = 0.05
 
 print("reading results")
 test_results = ReadResultTables2(phenotypes = query_phenotypes) %>%
-  mutate(Trait = recode(phenotype, !!!phenotypes_deeprvat)) %>%
+  mutate(Trait = recode(phenotype, !!!phenotype_renamer_rev)) %>%
   filter(pval_type == "score") %>%
   select(-pval_type)
 print(test_results %>% distinct(Trait))
@@ -98,7 +92,7 @@ if (!is.na(combine_pvals)){
 }
 stopifnot(as.numeric(test_results %>% group_by(gene_id, across(all_of(pheno_col))) %>% 
                        summarise(n = n()) %>% 
-                        ungroup() %>% arrange(n) %>% distinct(n)) == 1)
+                       ungroup() %>% arrange(n) %>% distinct(n)) == 1)
 
 
 print("Computing significant couunts")
@@ -125,7 +119,19 @@ write_parquet(all_sig, file.path(dirname(out_path), paste0('monti_results', phen
 saveRDS(all_sig_counts, file.path(dirname(out_path), paste0('monti_counts', phenotype_suffix, '.Rds')))
 write_parquet(all_sig_counts, file.path(dirname(out_path), paste0('monti_counts', phenotype_suffix, '.parquet')))
 
+if (any(grepl("Jurgens", query_phenotypes))){
+  stop("Analysing binary traits. Not computing replication", call. = FALSE)
+}
+
 print("Checking replication")
+
+comparison <- read_parquet(file.path(code_dir, "../../data/comparison_results.parquet")) %>%
+  mutate(in_comparison = TRUE) %>%
+  mutate(Trait = str_remove(phenotype, "_standardized")) %>%
+  mutate(Trait = recode(Trait, !!!phenotype_renamer_rev)) %>%
+  rename(phenotype_standardized = phenotype) %>%
+  mutate(phenotype = gsub("_standardized", "", phenotype_standardized))
+
 missing_replication_traits = setdiff(c(unlist(unique(test_results[pheno_col]))), unlist(unique(comparison[pheno_col])))
 warning(paste('Traits not present in replication data', missing_replication_traits, 'excluding these traits'))
 
@@ -158,7 +164,7 @@ add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotyp
   
   rep_list = append(rep_list, list(df_all))
   for (this_pheno in unique(df[[pheno_col]])) {
-
+    
     pheno_rep <- df %>%
       filter(across(all_of(pheno_col)) == this_pheno) %>%
       arrange(pval) %>%
@@ -169,7 +175,7 @@ add_replication <- function(df, comparison, thresh = 0.05, pheno_col = "phenotyp
       head(1000)
     rep_list = append(rep_list, list(pheno_rep))
   }
-
+  
   df_combined = rbindlist(rep_list, use.names = TRUE)
   return(df_combined)
 }
