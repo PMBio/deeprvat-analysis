@@ -10,6 +10,7 @@ library(tibble)
 code_dir = snakemake@params[["code_dir"]]
 source(file.path(code_dir, 'rvat_figure_utils.R'))
 source(file.path(code_dir, 'rvat_figure_paths.R'))
+source(file.path(code_dir, '../phenotypes.R'))
 
 
 replication_file_deeprvat = snakemake@input[["replication"]]
