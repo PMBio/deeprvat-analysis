@@ -7,7 +7,7 @@ import os
 min_version("6.0")
 
 
-configfile: "config_eval.yaml"
+configfile: "config.yaml"
 
 
 from pathlib import Path

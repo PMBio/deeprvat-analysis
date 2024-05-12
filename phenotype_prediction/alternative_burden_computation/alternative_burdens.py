@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from pprint import pprint
 from typing import Dict, List, Optional, Tuple, Union
+from scipy.stats import beta
 
 import click
 import dask.dataframe as dd
@@ -16,19 +17,54 @@ import pandas as pd
 import psutil
 import torch
 import torch.nn as nn
-import statsmodels.api as sm
 import yaml
 from joblib import Parallel, delayed
 from numcodecs import Blosc
-from scipy.sparse import coo_matrix
-from statsmodels.tools.tools import add_constant
 from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm import tqdm
 import zarr
 import re
 from deeprvat.data import DenseGTDataset
-from seak import scoretest, lrt
-from name_mappings import BTYPES_DICT, PLOF_CONSEQUENCES
+
+
+def calculate_beta_maf_weights(anno, beta_weights=(1, 25)):
+    weight = beta.pdf(anno, beta_weights[0], beta_weights[1])
+
+    return weight
+
+
+BTYPES_DICT = {
+    "is_plof": "plof",
+    "CADD_raw": "cadd",
+    "AbSplice_DNA": "absplice",
+    "PrimateAI_score": "primateai",
+    "sift_score": "sift",
+    "polyphen_score": "polyphen",
+    "SpliceAI_delta_score": "splicai",
+    "Consequence_missense_variant": "missense",
+}
+cutoff_dict = {
+    "CADD_raw": "> 0",
+    "AbSplice_DNA": "> 0",
+    "PrimateAI_score": "> 0",
+    "sift_score": "< 1",
+    "polyphen_score": "> 0",
+    "SpliceAI_delta_score": "> 0",
+    "alphamissense": "> 0",
+}
+
+
+PLOF_CONSEQUENCES = [
+    f"Consequence_{c}"
+    for c in (
+        "splice_acceptor_variant",
+        "splice_donor_variant",
+        "frameshift_variant",
+        "stop_gained",
+        "stop_lost",
+        "start_lost",
+    )
+]
 
 
 logging.basicConfig(
@@ -60,21 +96,52 @@ def make_dataset_(
     if btype is not None:
         rare_config = data_config["dataset_config"]["rare_embedding"]["config"]
         logger.info(f"Adatpting data config to match btype {btype}")
-        burden_anno = (
-            BTYPES_DICT_rev[btype] if btype in list(BTYPES_DICT_rev.keys()) else btype
-        )
-        rare_config["annotations"] = [burden_anno]
-        if btype == "plof":
-            rare_config["annotations"] = ["is_plof"]
-            rare_config["thresholds"]["is_plof"] = "is_plof == 1"
-            data_config["dataset_config"]["annotations"].append("is_plof")
-        else:
+
+        if ("missense" in btype) & ("plof" in btype):
+            rare_config["annotations"] = PLOF_CONSEQUENCES
+            data_config["dataset_config"]["annotations"].extend(PLOF_CONSEQUENCES)
+            rare_config["annotations"].append("Consequence_missense_variant")
+            rare_config["thresholds"][
+                "Consequence_missense_variant"
+            ] = f" (Consequence_missense_variant == 1) or ({' or '.join([f'{c}==1'for c in PLOF_CONSEQUENCES])})"
+        elif "plof" in btype:
+            rare_config["annotations"] = PLOF_CONSEQUENCES
+            rare_config["thresholds"]["is_plof"] = " or ".join(
+                [f"{c}==1" for c in PLOF_CONSEQUENCES]
+            )
+            data_config["dataset_config"]["annotations"].extend(PLOF_CONSEQUENCES)
+            print(data_config)
+
+        elif "missense" in btype:
+            rare_config["annotations"] = ["Consequence_missense_variant"]
             rare_config["thresholds"][
                 "Consequence_missense_variant"
             ] = "Consequence_missense_variant == 1"
+
+        else:
+            burden_anno = (
+                BTYPES_DICT_rev[btype]
+                if btype in list(BTYPES_DICT_rev.keys())
+                else btype
+            )
+            rare_config["annotations"] = [burden_anno]
+            rare_config["thresholds"][
+                burden_anno
+            ] = f"{burden_anno} {cutoff_dict[burden_anno]}"
+            # rare_config["thresholds"][
+            #     "Consequence_missense_variant"
+            # ] = "Consequence_missense_variant == 1"
+
+        if "weighted" in btype:
+            rare_config["annotations"].append("UKB_AF")
+            data_config["dataset_config"]["annotations"].append("UKB_AF")
+
+        print(rare_config)
         logger.info(
             f"rare config: {rare_config}, anntotation file: {data_config['dataset_config']['annotation_file']}"
         )
+        print(data_config)
+
     ds_pickled = data_config.get("pickled", None)
     if ds_pickled is not None and os.path.isfile(ds_pickled):
         logger.info("Loading pickled dataset")
@@ -122,22 +189,10 @@ def make_dataset(
     with open(config_file) as f:
         config = yaml.safe_load(f)
 
-    # if sample_file is not None:
-    #     with open(sample_file, 'rb') as f:
-    #         samples = pickle.load(f)['association_samples']
-    # else:
-    #     samples = None
-
-    # ds = make_dataset_(config, debug=debug, data_key=data_key, samples=samples)
-
     ds = make_dataset_(config, debug=debug, data_key=data_key, btype=btype)
 
     with open(out_file, "wb") as f:
         pickle.dump(ds, f)
-
-
-
-
 
 
 def get_burden(
@@ -153,8 +208,16 @@ def get_burden(
     logger.info(f"burdens after summing shape: {burdens.shape}")
     if btype == "plof":
         burdens[burdens > 0] = 1
-    if btype == 'sift':
-        burdens = np.min(burdens, axis=2) 
+    elif "weighted" in btype:
+        burdens[burdens != 0] = calculate_beta_maf_weights(burdens[burdens != 0])
+        burdens = np.sum(burdens, axis=2)
+    elif btype == "sift": # special handling for sift since 0 score = strong effect
+        non_zero_mask = burdens != 0
+        # set all zero values to 1
+        masked_burdens = np.where(non_zero_mask, burdens, 1)
+        # Getting the minimum along axis=2
+        min_non_zero_values = np.min(masked_burdens, axis=2)
+        burdens = 1 - min_non_zero_values
     else:
         burdens = np.max(burdens, axis=2)  # sum burden variants for each gene
     logger.info(f"burdens after maxing shape: {burdens.shape}")
@@ -181,10 +244,7 @@ def compute_alternative_burdens_(
     ds_full = ds.dataset if isinstance(ds, Subset) else ds
     collate_fn = getattr(ds_full, "collate_fn", None)
     n_total_samples = len(ds)
-    # import ipdb; ipdb.set_trace()
     if btype == "plof":
-        # PLOF_CONSEQUENCES = [f'Consequence_{c}'  for c in ('splice_acceptor_variant', 'splice_donor_variant',
-        #             'frameshift_variant', 'stop_gained', 'stop_lost', 'start_lost')]
         logger.info(f"rare annotations: {ds_full.rare_embedding.annotations}")
         if "is_plof" not in ds_full.rare_embedding.annotations:
             burden_idx = [
@@ -192,6 +252,8 @@ def compute_alternative_burdens_(
             ]
         else:
             burden_idx = [ds_full.rare_embedding.annotations.index("is_plof")]
+    elif "weighted" in btype:
+        burden_idx = [ds_full.rare_embedding.annotations.index("UKB_AF")]
     else:
         annotation_btype = (
             BTYPES_DICT_rev[btype] if btype in list(BTYPES_DICT_rev.keys()) else btype
@@ -226,6 +288,7 @@ def compute_alternative_burdens_(
         chunk_end = chunk_start + batch_size
     else:
         batch_size = n_samples
+    batch_size = 100
     print(data_config["dataloader_config"])
     dl = DataLoader(
         ds,
@@ -234,59 +297,76 @@ def compute_alternative_burdens_(
         **data_config["dataloader_config"],
     )
 
-    batch = next(iter(dl))
-    this_burdens, this_y, this_x = get_burden(batch, burden_idx, btype)
+    # batch = next(iter(dl))
+    for i, batch in tqdm(
+        enumerate(dl),
+        file=sys.stdout,
+        total=(n_samples // batch_size + (n_samples % batch_size != 0)),
+    ):
+        this_burdens, this_y, this_x = get_burden(batch, burden_idx, btype)
+        logger.info("Saving to zarr files")
+        this_samples = np.expand_dims(np.array([int(i) for i in batch["sample"]]), 1)
+        if i == 0:
+            chunk_burden = np.zeros(shape=(n_samples,) + this_burdens.shape[1:])
+            chunk_y = np.zeros(shape=(n_samples,) + this_y.shape[1:])
+            chunk_x = np.zeros(shape=(n_samples,) + this_x.shape[1:])
+            chunk_sampleid = np.zeros(shape=(n_samples, 1))
+            burdens = zarr.open(
+                Path(cache_dir) / "burdens.zarr",
+                mode="a",
+                shape=(n_total_samples,) + this_burdens.shape[1:],
+                chunks=(1000, 1000),
+                dtype=np.float32,
+            )
+            samples = zarr.open(
+                Path(cache_dir) / "samples.zarr",
+                mode="a",
+                shape=(n_total_samples,) + this_samples.shape[1:],
+                chunks=(None, None),
+                dtype=np.float32,
+            )
 
-    logger.info("Saving to zarr files")
-    burdens = zarr.open(
-        Path(cache_dir) / "burdens.zarr",
-        mode="a",
-        shape=(n_total_samples,) + this_burdens.shape[1:],
-        chunks=(1000, 1000),
-        dtype=np.float32,
-    )
-    burdens[chunk_start:chunk_end] = this_burdens
-    # import ipdb; ipdb.set_trace()
-    this_samples = np.expand_dims(np.array([int(i) for i in batch['sample']]),1)
-    samples = zarr.open(Path(cache_dir) / 'samples.zarr',
-            mode='a',
-            shape=(n_total_samples, ) + this_samples.shape[1:],
-            chunks=(None, None),
-            dtype=np.float32)
+            if this_y.shape[1] > 0:
+                # only write results for y and x if y exists.
+                # non-existence of y is the case when y_phenotype is empty
+                # which can be used in case you just want to get the burdens for all phenotypes
+                y = zarr.open(
+                    Path(cache_dir) / "y.zarr",
+                    mode="a",
+                    shape=(n_total_samples,) + this_y.shape[1:],
+                    chunks=(None, None),
+                    dtype=np.float32,
+                )
+                x = zarr.open(
+                    Path(cache_dir) / "x.zarr",
+                    mode="a",
+                    shape=(n_total_samples,) + this_x.shape[1:],
+                    chunks=(None, None),
+                    dtype=np.float32,
+                )
 
-    samples[chunk_start:chunk_end] = this_samples
+        start_idx = i * batch_size
+        end_idx = min(start_idx + batch_size, chunk_end)  # read from chunk shape
+
+        chunk_burden[start_idx:end_idx] = this_burdens
+        chunk_sampleid[start_idx:end_idx] = this_samples
+        if this_y.shape[1] > 0:
+            chunk_y[start_idx:end_idx] = this_y
+            chunk_x[start_idx:end_idx] = this_x
+
+    burdens[chunk_start:chunk_end] = chunk_burden
+    samples[chunk_start:chunk_end] = chunk_sampleid
+
     if this_y.shape[1] > 0:
-        # only write results for y and x if y exists.
-        # non-existence of y is the case when y_phenotype is empty
-        # which can be used in case you just want to get the burdens for all phenotypes
-        y = zarr.open(
-            Path(cache_dir) / "y.zarr",
-            mode="a",
-            shape=(n_total_samples,) + this_y.shape[1:],
-            chunks=(None, None),
-            dtype=np.float32,
-        )
-        x = zarr.open(
-            Path(cache_dir) / "x.zarr",
-            mode="a",
-            shape=(n_total_samples,) + this_x.shape[1:],
-            chunks=(None, None),
-            dtype=np.float32,
-        )
-        
-        y[chunk_start:chunk_end] = this_y
-        x[chunk_start:chunk_end] = this_x
-        
+        y[chunk_start:chunk_end] = chunk_y
+        x[chunk_start:chunk_end] = chunk_x
 
-    else:
-        y = None
-        x = None
     if debug:
         logger.info(
             "Wrote results for chunk indices " f"[{chunk_start}, {chunk_end - 1}]"
         )
 
-    return ds_full.rare_embedding.genes, burdens, y, x
+    return ds_full.rare_embedding.genes
 
 
 @torch.no_grad()
@@ -332,7 +412,7 @@ def compute_alternative_burdens(
 
     ds_dataset = dataset.dataset if isinstance(dataset, Subset) else dataset
 
-    genes, _, _, _ = compute_alternative_burdens_(
+    genes = compute_alternative_burdens_(
         debug, config, dataset, out_dir, btype, n_chunks=n_chunks, chunk=chunk
     )
 
