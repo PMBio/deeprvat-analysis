@@ -339,7 +339,6 @@ rule all_burdens:
 rule extract_burdens:
     input:
         discoveries=f"discoveries/all_significant.parquet",
-        # burdens=lambda wildcards: f"cv_split{{cvsplit}}/{burden_dir_mapper[wildcards.btype]}/{burden_phenotype}/{wildcards.btype}/burdens{split_mapper[wildcards.split]}/burdens_zarr.created",
     output:
         "burdens/{btype}_burdens.pickle",
     resources:
