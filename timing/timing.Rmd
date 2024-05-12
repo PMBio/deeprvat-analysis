@@ -241,11 +241,21 @@ deeprvat_avg
 ```
 
 # Evaluate results
+
 ```{r}
+training_time_deeprvat <- read_parquet(deeprvat_train_time_res)
+training_time_deeprvat
+```
+
+
+```{r}
+n_cv_splits = 5
+n_repeats = 6 # number of ensembled DeepRVAT models per split
+
 #Training and burden computation were retrieved manually from log files of training jobs and burden computation jobs 
-deeprvat_train_time = 16449
-deeprvat_burden_time_with_overhead = 250
-deeprvat_burden_time = 233
+deeprvat_train_time = training_time_deeprvat %>% filter(Individuals == 130000) %>% pull(`Training time (s)`)  * n_repeats * n_cv_splits#
+deeprvat_burden_time_with_overhead = 250 
+deeprvat_burden_time = 233 
 ```
 
 
@@ -495,7 +505,7 @@ this_df_x_fold = this_df %>%
   mutate(time_x_val = paste0(round(time_x,0), 'x \n (', time_h, ' d)' ))
 this_df_x_fold
 
-saveRDS(this_df_x_fold,'timing_data_x_fold_60_pheno.Rds') #to use for plotting of the main figure
+# saveRDS(this_df_x_fold,'timing_data_x_fold_60_pheno.Rds') #to use for plotting of the main figure
 
 ```
 
@@ -524,11 +534,8 @@ p_pheno_x_fold
 
 
 
-## Get training times
-```{r}
-training_time_deeprvat <- read_parquet(deeprvat_train_time_res)
-training_time_deeprvat
-```
+## Plot training times for different number of individuals
+
 
 
 ```{r}
@@ -545,10 +552,14 @@ p_training_time
 
 
 ```{r}
-ggarrange(p_training_time, p_timing, nrow = 1, align = 'h',
+timing_supp = ggarrange(p_training_time, p_timing, nrow = 1, align = 'h',
           widths = c(0.4, 0.6), labels = c('a', 'b'), 
           font.label = list(size = 20, color = "black", face = "bold", family = NULL)
 )
+
+# plot_out_dir = '.'
+
+# ggsave(file.path(plot_out_dir, 'timing_supp_figure.png'), timing_supp, dpi = 600, width = 10, height = 4)
 ```
 
 
