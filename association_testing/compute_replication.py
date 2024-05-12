@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 
-PHENOTYPES = [
+train_phenotypes = [
     "Apolipoprotein_A",
     "Apolipoprotein_B",
     "Calcium",
@@ -47,23 +47,24 @@ PHENOTYPES = [
     "Neutrophill_count",
     "Red_blood_cell_erythrocyte_count",
 ]
-# PHENOTYPES = [  
-#   "Body_mass_index_BMI",
-#   "Glucose",
-#   "Vitamin_D",
-#   "Albumin",
-#   "Total_protein",
-#   "Cystatin_C",
-#   "Gamma_glutamyltransferase",
-#   "Alkaline_phosphatase",
-#   "Creatinine",
-#   "Whole_body_fat_free_mass", 
-#   "Forced_expiratory_volume_in_1_second_FEV1",
-#   "Glycated_haemoglobin_HbA1c"
-#   ]
+new_phenotypes = [  
+  "Body_mass_index_BMI",
+  "Glucose",
+  "Vitamin_D",
+  "Albumin",
+  "Total_protein",
+  "Cystatin_C",
+  "Gamma_glutamyltransferase",
+  "Alkaline_phosphatase",
+  "Creatinine",
+  "Whole_body_fat_free_mass", 
+  "Forced_expiratory_volume_in_1_second_FEV1",
+  "Glycated_haemoglobin_HbA1c"
+  ]
 
 
-
+PHENOTYPES = [*train_phenotypes, *new_phenotypes]
+PHENOTYPES = train_phenotypes
 
 METHODS = list(
     reversed(
@@ -223,7 +224,6 @@ def prep_for_rep_plot(
 @click.option("--out-file", type=click.Path(), default="replication.parquet")
 @click.option("--recompute-comparison-results", is_flag=True)
 # @click.option("--analyze-all-repeats", is_flag=True)
-@click.option("--n-repeats", type=int)
 @click.option("--result-files",  multiple = True, type=click.Path(exists=True))
 @click.argument("experiment-dir", type=click.Path(exists=True))
 def cli(
@@ -231,7 +231,6 @@ def cli(
         experiment_dir: str, 
         result_files: Tuple,
         recompute_comparison_results: bool,
-        n_repeats: int, 
         # analyze_all_repeats: bool,
 ):
     if recompute_comparison_results:
