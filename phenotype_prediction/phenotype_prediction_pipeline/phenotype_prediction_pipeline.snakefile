@@ -31,9 +31,6 @@ phenotype_suffixes = regression_config["pheno_suffixes"]
 top_quantiles = regression_config["top_quantiles"]
 
 btypes = copy.deepcopy(regression_config["r_config"]["btypes"])
-print(btypes)
-# btypes.append("deeprvat")
-# btypes.remove('sift')
 burden_btypes = [btype for btype in btypes if "_" not in btype]
 
 py = f"python {code_dir}/"
@@ -303,7 +300,6 @@ rule prep_data_for_r:
     output:
         "r_data/{phenotype}/data.finished",
     params:
-        # dataset_dir="cv_split{cvsplit}/deeprvat/{phenotype}/deeprvat/",
         burdens_dir="burdens",
         out_dir="r_data/{phenotype}",
         burden_types=[f"--burden-type {b} " for b in burden_btypes],
@@ -319,7 +315,6 @@ rule prep_data_for_r:
                     " --phenotype {wildcards.phenotype}"
                     " {params.burden_types}"
                     " --discoveries-file {input.discoveries}"
-                    # " --dataset-dir {params.dataset_dir} "
                     " --burdens-dir {params.burdens_dir} "
                     " --out-dir {params.out_dir} "
                     " {input.samples_train}"
