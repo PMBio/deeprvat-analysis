@@ -22,7 +22,7 @@ rule plot:
         mem_mb=20480,
         load=16000,
     script:
-        f'{DEEPRVAT_ANALYSIS_DIR}/association_testing/figure_3_main.R'
+        f'{DEEPRVAT_ANALYSIS_DIR}/association_testing/quick_plot_figure2.R'
 
 rule compute_replication:
     input:
