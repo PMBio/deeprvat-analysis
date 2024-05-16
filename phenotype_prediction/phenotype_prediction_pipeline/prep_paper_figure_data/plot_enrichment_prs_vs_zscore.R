@@ -4,7 +4,6 @@ library(purrr)
 options(dplyr.summarise.inform = FALSE)
 
 
-fdr = snakemake@params[['fdr']]
 phenotype_suffix = snakemake@params[['phenotype_suffix']]
 linear_model_res_path = snakemake@params[['linear_model_res_path']]
 this_quantile = as.numeric(snakemake@params[['quantile']])
@@ -19,7 +18,7 @@ print(paste('Using results from', linear_model_res_path))
 
 compute_enrichment_zscore = function(df, zscore){
   enrich_df = df %>% filter(zscore_y > zscore) %>%
-    group_by(model_name, model, burden, vtype_repeat,  phenotype) %>%
+    group_by(model_name, model, burden, phenotype) %>%
     summarize(size = n(),
               extremes = sum(extreme_estimate)) %>%
     ungroup() %>%
@@ -33,20 +32,20 @@ for (this_phenotype in phenotypes){
   print(this_phenotype)
   # this_phenotype = 'Triglycerides'
   
-  this_df = readRDS(file.path(linear_model_res_path, 'plotting_data', paste0('plot_df_list_sub_', this_phenotype, '_', phenotype_suffix, '_', fdr,'.Rds'))) 
+  this_df = readRDS(file.path(linear_model_res_path, 'plotting_data', paste0('plot_df_list_sub_', this_phenotype, '_', phenotype_suffix,'.Rds'))) 
   print(nrow(this_df)/nrow(this_df %>% distinct(model)))
   
   quantile_df = this_df %>% #filter(gene_list == 'deeprvat_discoveries') %>%
-    select(-gene_list, -cv_split) %>%
-    group_by(model_name, model, burden, vtype_repeat,  phenotype) %>%
+    select(-gene_list) %>%
+    group_by(model_name, model, burden,  phenotype) %>% 
     summarise(quant_thres = quantile(estimate, this_quantile)) %>%
     ungroup()
   
   
   input_df = this_df %>% 
-    drop_na(vtype_repeat) %>%
-    select(-gene_list, -cv_split) %>%
-    group_by(model_name, model, burden, vtype_repeat,  phenotype) %>%
+    # drop_na(vtype_repeat) %>%
+    select(-gene_list) %>%
+    group_by(model_name, model, burden, phenotype) %>%
     mutate(zscore_y = (Y - mean(Y))/sd(Y)) %>%
     ungroup() %>%
     merge(quantile_df, how = 'left') %>%
@@ -72,5 +71,5 @@ print('saving data')
 direction_suffix = ifelse(direction == 'both', '_both', '')
 combined_enrichment = do.call(rbind, res_list)
 saveRDS(combined_enrichment, file.path(linear_model_res_path, 'plotting_data', paste0('enrichment_prs_vs_zscore_', direction_suffix,
-                                                                                   this_quantile, '_', phenotype_suffix, '_', fdr,'.Rds')))
+                                                                                   this_quantile, '_', phenotype_suffix, '.Rds')))
 

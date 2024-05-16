@@ -5,7 +5,6 @@ library(purrr)
 
 
 exp_name = snakemake@params[['exp_name']]
-fdr = snakemake@params[['fdr']]
 phenotype_suffix = snakemake@params[['phenotype_suffix']]
 linear_model_res_path = snakemake@params[['linear_model_res_path']]
 outlier_mode = snakemake@params[['outlier_mode']]
@@ -25,22 +24,17 @@ all_ranks = seq(1, 5000, 10)
 
 for (this_phenotype in phenotypes){
   print(this_phenotype)
-  this_df = readRDS(file.path(linear_model_res_path, 'plotting_data', paste0('plot_df_list_sub_', this_phenotype, '_', phenotype_suffix, '_', fdr,'.Rds'))) %>%
+  this_df = readRDS(file.path(linear_model_res_path, 'plotting_data', paste0('plot_df_list_sub_', this_phenotype, '_', phenotype_suffix, '.Rds'))) %>%
     select(-gene_list)
-  unique(this_df$gene_list)
   sd_prs = sd(this_df %>% filter(model == 'covariates-PRS') %>% pull(estimate))
   
-  #dummy rows for covariates for all gene lists
-  covariates_res = this_df %>% filter(grepl('covariates', model_name))
-  for (this_gene_list in na.omit(unique(this_df$gene_list))){
-    this_df = rbind(this_df, covariates_res %>% mutate(gene_list = this_gene_list))
-  }
   plot_df_delta = this_df  %>%
     select(model, estimate, Y, index) %>%
     pivot_wider(names_from = model, values_from = estimate)
-  
+ 
+  burden_cols = grep('covariates', unique(this_df[['model']]), invert = TRUE, value = TRUE)
   plot_df_delta = plot_df_delta %>%
-    pivot_longer(grep('baseline|deeprvat', names(plot_df_delta), value = TRUE),
+    pivot_longer(all_of(burden_cols),
                  names_to = "Rare estimator", values_to = 'rare_prediction') %>%
     mutate(d_rare_prs = abs(`covariates-PRS` - rare_prediction))
   
@@ -95,5 +89,5 @@ print('Combining and saving data')
 
 ranked_df_combined = do.call(rbind, ranked_df_list)
 saveRDS(ranked_df_combined, file.path(linear_model_res_path, 'plotting_data', 'replication_in_extreme', paste0('ranked_df_combined_', 
-                                                    outlier_mode, '_', extreme_quantile, '_', phenotype_suffix, '_', fdr,'.Rds')))
+                                                    outlier_mode, '_', extreme_quantile, '_', phenotype_suffix, '.Rds')))
 

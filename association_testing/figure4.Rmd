@@ -1,0 +1,722 @@
+---
+title: "DeepRVAT - Figure 4: Association testing using REGENIE"
+author: "Eva Holtkamp"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+```{r}
+
+library(ggplot2)
+library(arrow)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(ggpubr)
+library(cowplot)
+library(latex2exp)
+library(tibble)
+
+
+source(file.path('rvat_figure_utils.R'))
+source(file.path('../phenotypes.R'))
+
+all_main_plots = list()
+all_supp_plots = list()
+```
+
+
+```{r}
+phenotype_file = #phenotypes.parquet comprising all individuals from the 200k WES cohort 
+
+sample_file_unrel_cauc = #ids of unrelated Caucasian individuals from the 200k WES cohort 
+
+### quantitative traits 
+deeprvat_unrel_cauc_dir =  "" #directory where DeepRVAT (wo REGENIE) has been run on unrelated Caucasian individuals from the 200k WES cohort
+deeprvat_rel_cauc_dir =  "" #directory where DeepRVAT (wo REGENIE) has been run on all Caucasian individuals from the 200k WES cohort
+deeprvat_regenie_cauc =  "" #directory where DeepRVAT+REGENIE has been run on all Caucasian individuals from the 200k WES cohort
+deeprvat_regenie_aa =  "" #directory where DeepRVAT+REGENIE has been run on all individuals from the 200k WES cohort
+
+## binary traits
+
+binary_regenie_default_dir =  "" #directory where REGENIE's default RVAT implementation (Burden/SKAT) has been run on unrelated Caucasian individuals from the 200k WES cohort  on binary traits
+binary_deeprvat_regenie_dir =  "" #directory where DeepRVAT+REGENIE has been run on unrelated Caucasian individuals from the 200k WES cohort on binary traits
+staar_dir =  ""  #directory where STAAR has been run on unrelated Caucasian individuals from the 200k WES cohort on binary traits
+monti_dir =   ""  #directory where Monti has been run on unrelated Caucasian individuals from the 200k WES cohort on binary traits
+burden_skat_dir = ""  #directory where Burden/SKAT test (using SEAK) has been run on unrelated Caucasian individuals from the 200k WES cohort on binary traits
+
+
+caf_file = "" #cumulative allele frequency for pLoF/missense variants for all genes  
+
+
+
+```
+
+
+
+
+## Replication quantitative traits
+
+```{r}
+colors3 <- c("salmon", "aquamarine4", '#7A2961')
+colors4 <- c("DeepRVAT,\nEuropean (unrelated)" = "lightblue",
+    "DeepRVAT,\nEuropean (incl. related)" = "salmon", 
+    "DeepRVAT+REGENIE,\nEuropean (incl. related)" =  "aquamarine4",
+    "DeepRVAT+REGENIE,\nAll ancestry (incl. related)" = '#7A2961')
+
+
+font_size <- 10
+title_font_size = 12
+font_family <- "Helvetica"
+plot_font <- element_text(size = font_size, family = font_family)
+
+base_fonts = theme(
+  text = element_text(size = font_size, family = font_family),
+  axis.text = element_text(size = font_size, family = font_family),
+  axis.title = element_text(size = font_size + 2, family = font_family))
+
+base_theme <- base_fonts +
+  theme(
+  strip.text.x = element_text(size = font_size + 2, family = font_family),
+  strip.text.y = element_text(size = font_size + 2, family = font_family),
+  
+  legend.title=element_blank(),
+  plot.margin = margin(1, 1, 1, 1, "cm"),
+  panel.background = element_rect(fill='transparent'), #transparent panel bg
+  plot.background = element_rect(fill='transparent', color=NA, linewidth = 0), #transparent plot bg
+  legend.background = element_rect(fill='transparent'), #transparent legend bg
+  legend.box.background = element_rect(fill='transparent', color=NA), #transparent legend panel
+)
+
+makeReplicationPlot = function(replication, max_rank, split_by = "Cohort", title = '', colors = colors){
+
+  replication$Significant <- recode(factor(replication$Significant, levels=c(TRUE, FALSE)), `TRUE` = "True", `FALSE` = "False")
+
+  replication <- replication %>%
+    mutate(Trait = case_match(
+      Trait,
+      "MPTVS" ~ "MPTV",
+      .default = Trait
+    ))
+  replication_plot <- ggplot(replication %>% filter(`Gene rank` < max_rank), aes(x=`Gene rank`, y=`Replicated genes`, color=.data[[split_by]])) +
+    geom_abline(intercept=0, slope=1, color='lightgray', linewidth=0.5) +
+    geom_step(linewidth=0.4, aes(linetype=Significant)) +
+    scale_color_manual(values = colors) +
+    labs(title = title) +
+    # theme_cowplot() +
+    theme_classic() +
+    base_theme +
+    theme(
+      axis.text.x=element_text(angle=45, vjust=1, hjust=1),
+      axis.text.y=element_text(angle=45) #,
+      #legend.position = "none"
+    ) +
+    guides(linetype = "none")
+  
+  max_significant <- replication %>% 
+    filter(as.logical(Significant)) %>% 
+    group_by(.data[[split_by]]) %>% 
+    summarize(`Gene rank` = max(`Gene rank`), `Replicated genes` = max(`Replicated genes`))
+  max_significant
+  replication_plot <- replication_plot + geom_point(data=max_significant, aes(x=`Gene rank`, y=`Replicated genes`, color=.data[[split_by]]), size = 2)
+  return(replication_plot)
+}
+```
+
+
+
+```{r}
+res_dirs_deeprvat_quant = c('DeepRVAT,\nEuropean (unrelated)' = deeprvat_unrel_cauc_dir,
+                            'DeepRVAT,\nEuropean (incl. related)' = deeprvat_rel_cauc_dir,
+                            'DeepRVAT+REGENIE,\nEuropean (incl. related)' = deeprvat_regenie_cauc,
+                            'DeepRVAT+REGENIE,\nAll ancestry (incl. related)' = deeprvat_regenie_aa)
+```
+
+```{r}
+replication_file = "replication_all_traits.parquet"
+
+replication_200k_cauc_wwo_regenie = tibble()
+for (name in c(names(res_dirs_deeprvat_quant))){
+  replication = read_parquet(file.path(res_dirs_deeprvat_quant[name], replication_file))  %>% 
+    filter(Method == "DeepRVAT", pheno_grouping == "all_phenotypes") %>%
+    mutate(experiment = name)
+  
+  replication_200k_cauc_wwo_regenie = rbind(replication_200k_cauc_wwo_regenie, replication)
+}
+
+replication_200k_cauc_wwo_regenie = replication_200k_cauc_wwo_regenie %>% 
+  mutate(experiment = factor(experiment, levels = names(res_dirs_deeprvat_quant)))
+```
+
+
+```{r}
+repplot_all = makeReplicationPlot(
+  replication_200k_cauc_wwo_regenie,
+  split_by = "experiment",
+  max_rank = 1000,
+  colors = colors4
+  ) + 
+  theme(legend.spacing.y = unit(6, 'pt')) +
+  guides(color = guide_legend(byrow = TRUE), linetype = guide_legend(title = 'Significant')) + 
+    theme(legend.position = c(0.7, 0.5), 
+        legend.title = element_text(size = font_size, family = font_family), 
+        legend.text = element_text(size = font_size, family = font_family)) +
+  labs(color = '', linetype = 'Significant')
+
+all_main_plots[['replication_plot']] = repplot_all 
+
+repplot_all
+```
+## calibration quantitative traits (supp. figure)
+
+```{r}
+phenotypes_to_keep = quant_phenotypes 
+                            
+all_res_deeprvat_quant = tibble()
+for (method in names(res_dirs_deeprvat_quant)){
+  print(method)
+  this_element = res_dirs_deeprvat_quant[[method]]
+  this_res = loadDeepRVATResults(this_element, phenotypes_to_keep, 
+                                   phenotype_renamer = phenotype_renamer) 
+  all_res_deeprvat_quant  = bind_rows(all_res_deeprvat_quant , this_res$res %>% 
+                                  filter(Method == 'DeepRVAT') %>% mutate(Method = method))
+  
+}
+
+all_res_deeprvat_quant %>% distinct(Method)
+```
+
+
+```{r}
+makeQQPlot = function(df, plot_colors, subsample_data = TRUE, 
+                      grouping_cols = c("Method", "trait_group")){
+  df = df %>%
+    group_by(across(all_of(grouping_cols))) %>%
+    arrange(pval) %>%
+    mutate(`-log10pval_expected` = -log10(1:n() / n())) %>%
+    ungroup()
+
+  # Check if '-log10pval' column exists, if not, add it
+  if (!('-log10pval' %in% colnames(df))) {
+    df <- df %>%
+      mutate(`-log10pval` = -log10(pval))
+  }
+  sample_data <- function(df) {
+    df %>%
+      group_by(across(all_of(grouping_cols))) %>%
+      mutate(sample_percent = ifelse(`-log10pval_expected` < 2, 0.10, 0.5)) %>%
+      filter(runif(n()) < sample_percent)
+  }
+
+  # Sample the data --> Comment this in if you want to make the qqplot plotting faster
+  if (subsample_data){
+    df_sub <- df %>%
+      sample_data()
+  }else{
+    df_sub = df
+  }
+  nrow(df)
+  #show all values > max_val as triangles
+  max_val_binary = 30
+  max_val_quantitative = 50
+  
+  df_sub <- df_sub %>%
+    mutate(
+      shape = case_when(
+        trait_group == 'Binary' &  `-log10pval` > max_val_binary ~ 'triangle',
+        trait_group == 'Binary' &  `-log10pval` <= max_val_binary ~ 'circle',
+        trait_group == 'Quantitative' &  `-log10pval` > max_val_quantitative ~ 'triangle',
+        trait_group == 'Quantitative' &  `-log10pval` <= max_val_quantitative ~ 'circle',
+        TRUE ~ NA_character_
+      ),
+       `-log10pval` = case_when(
+        (trait_group == 'Binary' &  `-log10pval` > max_val_binary) |
+        (trait_group == 'Quantitative' &  `-log10pval` > max_val_quantitative) ~ max_val_binary,
+        TRUE ~  `-log10pval`
+      )
+    ) %>%
+    mutate(alpha = ifelse(`-log10pval_expected` < 4, 'alpha_low', 'alpha_high'))
+  
+   color_limits = intersect(unique(df[['Method']]), names(plot_colors))
+   color_names = gsub('\\+', '+\n',color_limits)
+   
+   qq_p = ggplot(df_sub, aes(x = `-log10pval_expected`, 
+                                                              y = `-log10pval`, color = Method,
+                                                              fill = Method, shape = shape, size = shape)) + #, alpha = `-log10pval_expected`)) +
+        labs(x = TeX("$Expected -log_{10}(P)$"), y = TeX("$Observed -log_{10}(P)$")) +
+        geom_abline(intercept = 0, slope = 1, color = 'darkgrey') +
+        geom_point() +
+        ylim(0, 30) +
+        theme_classic() +
+        base_theme_wo_margin +
+        theme(legend.position=c(0.3,0.8),#,
+              legend.text = element_text(size = 10)) + #, 
+              # aspect.ratio = 1) +
+        scale_color_manual(values = plot_colors, labels = color_names, limits = color_limits) +
+        scale_fill_manual(values = plot_colors, guide = 'none') +
+        scale_shape_manual(values = c('triangle' = 17,'circle' = 19), guide = 'none') +
+        scale_size_manual(values = c('triangle' = 1.5,'circle' = 0.5), guide = 'none')  
+   return(qq_p)
+}
+```
+
+
+```{r}
+pval_cols = c('Trait', 'gene', 'pval', 'Method')
+
+qq_quant = makeQQPlot(all_res_deeprvat_quant[pval_cols] %>% mutate(trait_group = 'Quantitative') , colors4)
+all_supp_plots[['calibration_quant']] = qq_quant
+```
+
+
+## discoveries binary traits 161k (unrelated)
+
+
+```{r}
+phenotypes_df = read_parquet(phenotype_file) 
+samples_to_keep_unrel_cauc = read.csv(sample_file_unrel_cauc, sep = ' ')[[1]]
+samples_to_keep_unrel_cauc = as.character(samples_to_keep_unrel_cauc)
+phenotypes_df = phenotypes_df %>% filter(sample %in% samples_to_keep_unrel_cauc)
+
+case_counts = colSums(phenotypes_df %>% select(starts_with('Jurgens')), na.rm = TRUE)
+case_counts = tibble('phenotype' = names(case_counts), 'n_cases' = case_counts)
+```
+
+
+### load regenie default results
+
+```{r}
+read_regenie_results = function(parent, filename) {
+  this_results = tibble(read.csv(file.path(parent, filename), sep=" ", comment.char = "#"))
+  basename_split = str_split(str_split(filename, "\\.")[[1]][1], "_")[[1]]
+  phenotype = paste0(basename_split[3:length(basename_split)], collapse = " ")
+  
+  this_results = this_results %>%
+    separate_wider_delim(ID, ".", names = c("gene", "mask", "aaf_bin"), too_many = "merge") %>%
+    filter(aaf_bin == "0.001") %>%
+    mutate(
+      phenotype = phenotype,
+      pval = 10^(-LOG10P),
+      pval_corrected = pval * n()
+      ) 
+
+  return(list(phenotype = phenotype, results = this_results))
+}
+```
+
+```{r}
+default_all_results = tibble()
+
+for (p in binary_phenotypes) {
+  this_results = read_regenie_results(file.path(binary_regenie_default_dir, "step2"), sprintf("results_%s.regenie", p))
+  default_all_results = rbind(default_all_results, this_results$results)
+}
+
+
+default_all_results
+```
+
+```{r}
+
+
+min_eac = 50 # minimum expected allele count for burden/skat tests
+
+caf_df = read_parquet(caf_file) %>% select(-`__index_level_0__`) %>% 
+  rename(btype_group = btype, gene = gene_id)
+eac_df = case_counts  %>% cross_join(caf_df) %>% mutate(eac = CAF * n_cases) %>%
+  mutate(keep_gene_binary = eac >= min_eac) %>%
+  mutate(pheno_group = 'binary')
+eac_df %>% 
+  group_by(phenotype, btype_group) %>% 
+  summarize(sum(keep_gene_binary))
+
+
+default_all_results_filtered = default_all_results  %>%
+  mutate(phenotype = paste('Jurgens', gsub(' ', '_', phenotype), sep = '_'),
+         gene = as.numeric(gene)) %>%
+  mutate(btype_group = ifelse(mask == 'pLOF', 'plof', mask)) %>%
+  left_join(eac_df) %>% filter(keep_gene_binary)
+
+
+test_counts = default_all_results_filtered %>% 
+  group_by(phenotype) %>% 
+  summarize(n_tests = n()) %>%
+  ungroup()
+
+default_results = default_all_results_filtered %>% 
+  left_join(test_counts) %>%
+  mutate(pval_corrected = pval * n_tests) %>%
+  mutate(significant = pval_corrected < 0.05) %>% 
+  arrange(pval) %>% 
+  filter(significant) %>% 
+  distinct(phenotype, gene, .keep_all = TRUE) %>%
+  mutate(
+    phenotype = gsub("_", " ", gsub("Jurgens_", "", phenotype))
+  )
+default_results
+```
+
+
+```{r}
+
+results = tibble()
+for (p in binary_phenotypes) {
+  this_results = read_parquet(file.path(binary_deeprvat_regenie_dir, p, "deeprvat/eval/significant.parquet"))
+  this_results = this_results %>%
+    mutate(phenotype = gsub("Jurgens ", "", phenotype))
+  results = rbind(results, this_results)
+}
+
+results
+```
+
+
+```{r}
+grouped_results = bind_rows(
+  default_results %>%
+    mutate(is_single_trait = TRUE, Method = "REGENIE") %>%
+    select(phenotype, Method, is_single_trait),
+  results %>%
+    mutate(is_single_trait = TRUE, Method = "DeepRVAT+REGENIE") %>%
+    select(phenotype, Method, is_single_trait)
+  )
+
+grouped_results = bind_rows(
+  grouped_results,
+  grouped_results %>%
+    mutate(phenotype = "All traits", is_single_trait = FALSE)
+)
+
+grouped_results = left_join(
+  grouped_results, 
+  bind_rows(
+    binary_trait_grouping_tibble,
+    tibble(binary_trait_grouping = "All traits", phenotype = "All traits")
+  )
+  ) %>%
+  mutate(
+    Method = factor(Method, levels = c("REGENIE", "DeepRVAT+REGENIE")),
+    phenotype = factor(phenotype, levels = c("All traits", sort(binary_trait_grouping_tibble$phenotype))),
+    trait_group = factor(binary_trait_grouping, levels = c("All traits", sort(unique(binary_trait_grouping_tibble$binary_trait_grouping))))
+    ) %>%
+  count(binary_trait_grouping, Method, is_single_trait, .drop = FALSE) %>%
+  replace_na(list(is_single_trait = TRUE))
+  #group_by(phenotype, Method) %>%
+  #summarise(discovery_count = n(), ) %>%
+  #ungroup() %>%
+
+sum((grouped_results %>% filter(is_single_trait, Method == "REGENIE"))$n)
+sum((grouped_results %>% filter(is_single_trait, Method == "DeepRVAT+REGENIE"))$n)
+grouped_results %>% filter(!is_single_trait)
+grouped_results
+```
+
+
+```{r}
+colors2 = c('#08519c', '#7A2961')
+#for (t_group in grouped_results %>% distinct(pheno_group)) {
+p = ggplot(
+  grouped_results, # %>% filter(Method %in% main_methods),
+  aes(
+    x=binary_trait_grouping,
+    y=n,
+    fill=Method,
+  )
+) + 
+  geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+  labs(y = "Significant gene-trait associations") +
+  theme_classic() +
+  # facet_grid(.~is_single_trait, scales='free', space = 'free') + #,  space = "free_x") +
+  ggforce::facet_row(vars(is_single_trait), scales = 'free', space = 'free') +
+  # theme_cowplot() +
+  base_theme_wo_strip +
+  theme(
+    axis.text.x=element_text(angle=45, vjust=1, hjust=1),
+    plot.title = element_text(hjust = 0.5, size = title_font_size),
+    axis.title.x=element_blank(),
+    legend.key.size=unit(0.5, "line"),
+    legend.text = element_text(size = 12),
+    legend.position = c(0.6, 0.5),
+    panel.spacing=unit(0.75, "cm"),
+    strip.background = element_blank(),
+  ) +
+  scale_fill_manual(values = colors2) +
+  scale_y_continuous(expand = expansion(mult = c(0, .1)))
+  
+p
+
+all_main_plots[['discoveries']] = p
+```
+
+## calibration binary traits
+
+
+### DeepRVAT resulsts 
+```{r}
+res_dirs_deeprvat = list(
+  'DeepRVAT' = deeprvat_unrel_cauc_dir,
+  'DeepRVAT+REGENIE' = binary_deeprvat_regenie_dir
+)
+             
+```
+
+```{r}
+all_counts_deeprvat  = tibble()
+all_res_deeprvat = tibble()
+for (method in names(res_dirs_deeprvat)){
+  print(method)
+  this_element = res_dirs_deeprvat[[method]]
+  this_res = loadDeepRVATResults(this_element,binary_phenotypes, 
+                                   phenotype_renamer = phenotype_renamer) 
+  all_counts_deeprvat  = bind_rows(all_counts_deeprvat , this_res$counts %>%
+                                     filter(Method == 'DeepRVAT')
+                                   %>% mutate(Method = method))
+  all_res_deeprvat  = bind_rows(all_res_deeprvat , this_res$res %>% 
+                                  filter(Method == 'DeepRVAT') %>% mutate(Method = method))
+  
+}
+
+ 
+
+```
+
+
+
+
+### Burden/SKAT wo REGENIE
+```{r}
+alpha = 0.05
+
+all_res_burden_skat = tibble()
+all_counts_burden_skat = tibble()
+for (phenotype in binary_phenotypes){
+  this_res_file = file.path(burden_skat_dir, phenotype, 'eval/burden_associations.parquet')
+  if(file.exists(this_res_file)){
+    this_res = read_parquet(this_res_file)
+    this_counts = this_res %>% mutate(pval_corrected = pval * nrow(this_res), 
+                                      significant = pval_corrected < alpha) %>% 
+       group_by(phenotype) %>%  summarize(n = sum(significant))
+    all_res_burden_skat = rbind(all_res_burden_skat, this_res)
+    all_counts_burden_skat = rbind(all_counts_burden_skat, this_counts)
+    
+  }else(
+    print(paste(this_res_file, "doesn't exist"))
+  )
+}
+
+all_counts_burden_skat = all_counts_burden_skat %>%
+  mutate(Trait = gsub('_', ' ', phenotype)) %>%
+  mutate(Method = 'Burden/SKAT combined')
+
+all_res_burden_skat = all_res_burden_skat %>%
+  mutate(Trait = gsub('_', ' ', phenotype)) %>%
+  mutate(Method = 'Burden/SKAT combined')
+```
+
+
+### Monti/STAAR results
+
+
+
+```{r}
+counts_staar_quant = readRDS(file.path(staar_dir, "sig_counts_staar_binary_phenotypes.Rds")) %>% 
+  mutate(Method = 'STAAR')  %>%
+  rename(n = discoveries) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) %>%
+  mutate(phenotype = paste0('Jurgens_', gsub(' ', '_', Trait)))
+
+staar_res_quant = readRDS(file.path(staar_dir, "staar_corrected_binary_phenotypes.Rds"))  %>% 
+  mutate(Method = 'STAAR') %>%
+  drop_na(pval) %>%
+  mutate(pval = as.numeric(pval))
+
+counts_monti_quant = readRDS(file.path(monti_dir, "monti_counts_binary_phenotypes.Rds")) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) %>%
+  rename(n = discoveries) %>%
+  mutate(Method = 'Monti et al.') %>% 
+  mutate(phenotype = Trait)
+ 
+monti_res_quant = readRDS(file.path(monti_dir, "monti_results_binary_phenotypes.Rds"))  %>% 
+  mutate(Method = 'Monti et al.') 
+```
+
+
+
+```{r}
+pval_cols = c('Trait', 'gene', 'pval', 'Method')
+count_cols = c('Trait', 'n', 'phenotype')
+
+all_pvals = bind_rows(all_res_deeprvat[pval_cols],
+                      all_res_burden_skat[pval_cols], 
+                      staar_res_quant[pval_cols],
+                      monti_res_quant[pval_cols],
+                      default_all_results_filtered %>% 
+  mutate(Trait =  gsub('_', ' ', gsub('Jurgens_', '', phenotype)),
+         Method = 'REGENIE')) %>%
+  mutate(trait_group = 'Binary') 
+
+all_pvals = all_pvals[c(pval_cols, 'trait_group')]
+
+
+count_cols = c('Trait', 'n', 'phenotype')
+default_counts = default_results %>% 
+  mutate(Trait = gsub('_', ' ', gsub('Jurgens_', '', phenotype))) %>%
+  group_by(Trait) %>%
+  summarize(n = n()) %>% 
+  mutate(Method = 'REGENIE')
+
+  
+all_counts = bind_rows(all_counts_deeprvat %>% mutate(phenotype = gsub(' ', '_', Trait)),
+                       all_counts_burden_skat, 
+                       counts_staar_quant,
+                       counts_monti_quant, 
+                       default_counts %>% mutate(phenotype = paste0('Jurgens_', gsub(' ', '_', Trait)))
+                       ) 
+all_counts %>% filter(is.na(phenotype))
+all_pvals %>% distinct(Method)
+
+
+```
+
+```{r}
+colors_with_default = colors
+colors_with_default[['DeepRVAT+REGENIE']] = 'violet'
+colors_with_default[['REGENIE']] = 'lightblue'
+
+colors_without_default = colors
+names(colors_without_default) = gsub('Burden/SKAT combined', 'REGENIE', names(colors_without_default))
+names(colors_without_default) = gsub('DeepRVAT', 'DeepRVAT+REGENIE', names(colors_without_default))
+
+df = all_pvals
+plot_colors = colors_with_default
+colnames(all_pvals)
+all_pvals %>% distinct(Method)
+```
+
+
+
+
+
+
+
+```{r}
+
+gsub("_", "", binary_phenotypes_balanced)
+p_sub = makeQQPlot(all_pvals %>% filter(Method %in% names(colors_without_default)),
+           colors_without_default)
+p_sub
+all_main_plots[['calibration_binary']] = p_sub
+
+p_all = makeQQPlot(all_pvals %>% filter(Method %in% names(colors_with_default)),
+           colors_with_default)
+
+all_supp_plots[['calibration_binary_all']] = p_all
+
+
+```
+
+
+```{r}
+
+all_pvals_renamed = all_pvals %>% mutate(Trait = gsub('Jurgens ', '', gsub('_', ' ', gsub('Jurgens_', '', Trait))))
+balanced_pheno_names = gsub('_', ' ', gsub('Jurgens_', '', binary_phenotypes_imbalanced))
+
+
+makeQQPlot(all_pvals_renamed %>% filter(Method %in% names(colors_without_default)) %>%
+                                          filter(Trait %in% balanced_pheno_names),
+           colors_without_default)
+```
+
+## case counts vs discoveries
+
+```{r}
+all_counts = all_counts %>% left_join(case_counts) %>% 
+  mutate(prevalence = n_cases/nrow(phenotypes_df))
+```
+
+
+```{r}
+library(scales)
+
+
+all_counts %>% filter(is.na(prevalence))
+
+
+# for (plot_colors in list(colors_without_default, colors_with_default)){
+makeCountPlot = function(this_counts, plot_colors){
+  color_limits = intersect(unique(df[['Method']]), names(plot_colors))
+  color_names = gsub('\\+', '+\n',color_limits)
+  p = ggplot(this_counts, aes(x = prevalence, y = n, color = Method)) + 
+    geom_point(size = 0.8) + 
+    theme_classic() +
+    scale_color_manual(values = plot_colors, limits = color_limits, labels = color_names) +
+    scale_x_continuous(labels = percent_format()) +
+    scale_y_log10() +
+    labs(x = 'Prevalence', y = 'Discoveries', color = '') +
+    theme(legend.position = c(0.5, 0.8)) +
+    base_fonts +
+    theme(legend.text = element_text(size = 10, family= font_family))
+  return(p)
+}
+
+
+p = makeCountPlot(this_counts = all_counts %>% filter(Method %in% names(colors_without_default)),
+                                                  colors_without_default)
+print(p)
+all_main_plots[['binary_counts_vs_prev']] = p
+
+p = makeCountPlot(this_counts = all_counts %>% filter(Method %in% names(colors_with_default)),
+                                                  colors_with_default)
+all_supp_plots[['binary_counts_vs_prev']] = p
+print(p)
+
+
+
+```
+
+
+
+```{r}
+names(all_main_plots)
+
+width = 12
+label_size = 25
+label_specs = list(size = label_size, color = "black", face = "bold", family = NULL)
+
+
+p = ggarrange(
+  ggarrange(all_main_plots[["replication_plot"]] +  theme(legend.position = c(0.7, 0.35)) +   theme(plot.margin = margin(t=0.5, r=0.5, b=0, l= 0, unit = "cm")),
+            all_main_plots[["calibration_binary"]] +  theme(legend.position = c(0.2, 0.8)) +   theme(plot.margin = margin(t=0.5, r=0, b=0, l= 0.5, unit = "cm")),
+            align = 'h', labels = c('a', 'b'), font.label = label_specs),
+  
+  ggarrange( all_main_plots[["binary_counts_vs_prev"]] +  theme(plot.margin = margin(t=1, r=0, b=2.5, l= 0, unit = "cm")),
+            all_main_plots[["discoveries"]] +  theme(legend.position = c(0.8, 0.5)), align = 'h', labels = c('c', 'd'), font.label = label_specs),
+   nrow = 2, ncol =1, heights = c(0.48, 0.52)
+)
+
+width = 12
+width = 9
+ggsave(file.path(plot_dir, 'figure_4.png'), p,
+        width = width , height = 1.05*width)
+  
+```
+
+
+```{r}
+font_theme = theme(axis.title = element_text(size = 12+2), legend.text = element_text(size = 12), axis.text = element_text(size = 10+2))
+p = ggarrange(ggarrange(all_supp_plots[["calibration_quant"]]  +  theme(plot.margin = margin(t=1.5, r=0, b=0, l= 0, unit = "cm"), legend.position = c(0.25,0.7)) + font_theme,
+          all_supp_plots[["calibration_binary_all"]]  +  theme(plot.margin = margin(t=1.5, r=0, b=0, l= 0, unit = "cm"),
+                                                               legend.position = c(0.2,0.75)) + font_theme,
+          nrow = 1, ncol = 2, labels = c('a', 'b'), font.label = label_specs, align = 'h', widths = c(0.5, 0.5)),
+          
+          ggarrange(all_supp_plots[["binary_counts_vs_prev"]]  +  theme(plot.margin = margin(t=1.5, r=0, b=0, l= 0, unit = "cm")) + font_theme,
+                    NA,
+          labels = c('c', ''), nrow = 1,  ncol = 2, font.label = label_specs , widths = c(0.5, 0.5)),
+          nrow = 2, ncol =1 )
+
+ggsave(file.path(plot_dir, 'figure_4_supp.png'), p,
+       width =12, height = 10, dpi = 600)
+```
+

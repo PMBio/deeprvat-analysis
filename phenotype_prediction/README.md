@@ -1,53 +1,52 @@
 # Run phenotype prediction pipeline
-The phenotype prediction pipeline uses cross-validation to attest generelizability of DeepRVAT-derived phenotype predictors. 
-For this, the following steps are run on each CV fold. 
-    1. Running Seed gene discory on training samples
-    2. Training DeepRVAT on training samples using the seed genes from the fold
-    3. Association testing using DeepRVAT gene impairments scores for the training samples 
-    4. Fitting phenotype predictors using DeepRVAT gene impairment scores for the training samples for significantly associated genes from step 3
-    5. Using the weights from the fitted predictors to predict the phenotype for test samples (using DeepRVAT gene impairment scores from the model trained in 3)
-Afterwards, the predictions for test samples across all test folds are aggregated to evaluate the model. 
+This folder provides the code to run all analyses and generate all plots related to Figure 3 of the DeepRVAT manuscript. 
+
+## Training/testing data sets
+Training and evaluation of the phenotype prediction regression models is done on two disjoint data sets, restricting to unrelated Caucasian individuals. A total of 154,966 (from UKBB 200k WES) and 224,817 individuals (from UKBB 470k WES, not found in UKBB 200k WES) were used for training and evaluation, respectively.
+The training data set is a subset of the unrelated Caucasian individuals from the UKBB 200k WES as used in the reference experiment, where samples with 3rd degree (or closer) relatives in the test set had been removed. 
+
 
 
 ## Input data
-An experiment directory with similar data input data as for the standard DeepRVAT pipeline has to be created (described [here](https://github.com/PMBio/deeprvat/)).
-The annotations for seed gene discovery should be named `baseline_annotations.parquet`.
-The annotations for DeepRVAT should be named `annotations.parquet`.
-The `genes.parquet`, `phenotypes.parquet` (on the complete cohort), `variants.parquet` are the same as for the DeepRVAT pipeline.
+The experiment directory with the correct config has already been set-up `phenotype_prediction_exp`
+The `protein_coding_genes.parquet`, `phenotypes.parquet` (on the complete cohort), `variants.parquet` are the same as for the DeepRVAT pipeline.
 
-### Genotype and phenotypes for each cross-validation fold
-For running DeepRVAT using Cross-validation, the phenotype and genotype data has to be split by samples for each cv-fold. 
-The split data has to be stored in `cv_data` in the experiment directory. 
-The data in `cv_data` is the following: 
- `genotypes_train{x}.h5`, `genotypes_train{x}_phenotypes.parquet`, `genotypes_test{x}.h5`, `genotypes_test{x}_phenotypes.parquet`,
- where x = [0,1,2,3,4] for 5 CV folds.
+### Train/test sample files
+A directory `train_test_samples` with the files `train_samples.pkl`, `test_samples.pkl`, comprising the sample ids for the training and testing fold (as a list of integers). 
 
-`genotypes_train0.h5` for examples is a subset of `genotypes.parquet` from DeepRVAT, which only comprises the genotypes for the training samples from the first CV fold.
-
+### Genotype and phenotypes 
+Genotypes (`genotypes.parquet`) and phenotypes (`phenotypes.parquet`) combined for all samples in  `train_test_samples` are required. 
 
 ### PRS Scores
 The common variant polygenic risk scores for all PGS ids listed in `../data/prs_pheno_map` have to be precomputed for the cohort. 
 The resulting PRS have to be stored in `PRS.parquet` in the experiment directory. 
-The column names of `PRS.parquet` have to be the PGS ids and the index (named `sample`) have to be the sample indices. 
+The column names of `PRS.parquet` have to be the PGS ids and the index (named `sample`) have to be the sample ids. 
 `../data/prs_pheno_map` also has to be copied/linked to the experiment directory. 
+
+### DeepRVAT gene impairment scores
+The folder `deeprvat_burdens` must have the `burdens.zarr` with the DeepRVAT gene impairment scores for all samples in `train_test_samples`. It also needs the metadata `sample_ids.zarr` and `genes.npy`, which provide the order of samples and genes in `burdens.zarr`. 
+The gene impairment scores are computed with the pre-trained models from `../association_testing/paper_experiment`, which only used unrelated Caucasian samples from the  UKBB 200k WES cohort during training. 
+
+### link to the reference experiment 
+The lists of genes whose gene impairment scores will  be included in the rare variant phenotype predictors are retrieved from the reference experiment `../association_testing/paper_experiment`. 
+
+### Alternative burden scores
+The code to retrieve burden scores from single variant annotations is provided in `alternative_burden_computation`. It extracts the max (min for SIFT) annotation score for each sample and gene. 
+`alternative_burden_computation/alternative_burdens.snakefile` has to be run before the `phenotype_prediction_pipeline.snakefile`. 
+The `alternative_burden_computation` contain the the annotated variants, genotypes, and phenotypes for all samples
+(`annotations.parquet`, `protein_coding_genes.parquet`, `genotypes.h5`, `phenotypes.parquet`, `variants.parquet`) (as [here](https://github.com/PMBio/deeprvat/example))
 
 
 ## Run the pipeline
-Copy `cv_deeprvat_training/config.yaml` and `phenotype_prediction_pipeline/config_eval.yaml` into the experiment directory.
+From the experiment directory `phenotype_prediction_exp` run the `phenotype_prediction_pipeline.snakefile`, making sure that the `--use-conda` flag is set. 
+This has to be run after `alternative_burden_computation/alternative_burdens.snakefile`!
 
-`phenotype_prediction_pipeline/phenotype_prediction_pipeline.snakefile` can be used to run the enire pipeline. 
-This will first run DeepRVAT and baseline methods in a cross-validation mode
-using `cv_deeprvat_training/run_deeprvat_cv.snakefile`, which will use the config from `cv_deeprvat_training/config.yaml`
-
-Then, the actual phenotype prediction models will be fitted using the following steps:
-
-  1. Retrieve the burdens for all signficant genes from the results of the previous experimnet
-  2. Prepare Regression model input data, comprising for all genes,
-     the phenotype value, the PRS score, covariates (age, sex, genetic principal components) 
-     and the gene scores (DeepRVAT or pLOF) for signficantly trait associated genes 
-  3. Run the regression for logistic and linear models
+The phenotype prediction pipeline will:
+  1. Prepare Regression model input data, comprising for all genes,
+     the phenotype value, the PRS score, covariates, 
+     and the gene scores (DeepRVAT or or alternative burdens) for significantly trait associated genes. 
+  2. Fit the regression models on the training data
+  3. Evaluate the trained models on the testing data 
   4. Prepare plotting data
-
-When running the piplein, make sure the --use-conda flag is set
 
 

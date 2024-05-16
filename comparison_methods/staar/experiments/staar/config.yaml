@@ -1,38 +1,101 @@
 phenotypes:
-  - Apolipoprotein_A
-  - Apolipoprotein_B
-  - Calcium
-  - Cholesterol
-  - HDL_cholesterol
-  - IGF_1
-  - LDL_direct
-  - SHBG
-  - Total_bilirubin
-  - Triglycerides
-  - Urate
-  - Standing_height
-  - Lymphocyte_percentage
-  - Mean_platelet_thrombocyte_volume
-  - Mean_corpuscular_volume
-  - Mean_reticulocyte_volume
-  - Neutrophill_count
-  - Platelet_count
-  - Platelet_crit
-  - Platelet_distribution_width
-  - Red_blood_cell_erythrocyte_count
-  - Body_mass_index_BMI
-  - Glucose
-  - Vitamin_D
-  - Albumin
-  - Total_protein
-  - Cystatin_C
-  - Gamma_glutamyltransferase
-  - Alkaline_phosphatase
-  - Creatinine
-  - Whole_body_fat_free_mass 
-  - Forced_expiratory_volume_in_1_second_FEV1
-  - Glycated_haemoglobin_HbA1c
-  - WHR_Body_mass_index_BMI_corrected
+- Apolipoprotein_A
+- Apolipoprotein_B
+- Calcium
+- Cholesterol_statin_corrected
+- HDL_cholesterol
+- IGF_1
+- LDL_direct_statin_corrected
+- Lymphocyte_percentage
+- Mean_corpuscular_volume
+- Mean_platelet_thrombocyte_volume
+- Mean_reticulocyte_volume
+- Neutrophill_count
+- Platelet_count
+- Platelet_crit
+- Platelet_distribution_width
+- Red_blood_cell_erythrocyte_count
+- SHBG
+- Standing_height
+- Total_bilirubin
+- Triglycerides
+- Urate
+- Body_mass_index_BMI
+- Glucose
+- Vitamin_D
+- Albumin
+- Total_protein
+- Cystatin_C
+- Gamma_glutamyltransferase
+- Alkaline_phosphatase
+- Creatinine
+- Whole_body_fat_free_mass
+- Forced_expiratory_volume_in_1_second_FEV1
+- Glycated_haemoglobin_HbA1c
+- WHR_Body_mass_index_BMI_corrected
+- Jurgens_Anxiety
+- Jurgens_Aortic_valve_disease
+- Jurgens_AV_or_bundle_branch_block
+- Jurgens_Bipolar_Disorder
+- Jurgens_Bladder_cancer
+- Jurgens_Bradyarrhythmia
+- Jurgens_Cardiac_arrest
+- Jurgens_Cardiac_surgery
+- Jurgens_Cervical_cancer
+- Jurgens_Chronic_kidney_disease
+- Jurgens_Colorectal_cancer
+- Jurgens_Congenital_heart_disease
+- Jurgens_Diabetes_Type_1
+- Jurgens_Dilated_Cardiomyopathy
+- Jurgens_Epilepsy
+- Jurgens_Glaucoma
+- Jurgens_Gout
+- Jurgens_Heart_failure
+- Jurgens_Hyperthyroidism
+- Jurgens_Hypertrophic_Cardiomyopathy
+- Jurgens_Implantable_cardioverter_defibrillator
+- Jurgens_Inflammatory_bowel_disease
+- Jurgens_Ischemic_stroke
+- Jurgens_Lung_cancer
+- Jurgens_Mitral_valve_disease
+- Jurgens_Multiple_sclerosis
+- Jurgens_Pancreatitis
+- Jurgens_Parkinsons_disease
+- Jurgens_Peripheral_vascular_disease
+- Jurgens_Prostate_cancer
+- Jurgens_Psoriasis
+- Jurgens_Rheumatoid_arthritis
+- Jurgens_Sciatica
+- Jurgens_Sleep_apnea
+- Jurgens_Supraventricular_tachycardia
+- Jurgens_Tricuspid_valve_disease
+- Jurgens_Ventricular_arrhythmia
+- Jurgens_Allergic_rhinitis
+- Jurgens_Asthma
+- Jurgens_Atrial_fibrillation
+- Jurgens_Back_pain
+- Jurgens_Breast_cancer
+- Jurgens_Cataract
+- Jurgens_Cholelithiasis
+- Jurgens_Chronic_obstructive_pulmonary_disease
+- Jurgens_Coronary_Artery_Disease
+- Jurgens_Depression
+- Jurgens_Dermatitis
+- Jurgens_Diabetes_Type_2
+- Jurgens_Diverticular_disease
+- Jurgens_Gastroesophageal_reflux_disease
+- Jurgens_Hypercholesterolemia
+- Jurgens_Hypertension
+- Jurgens_Hypothyroidism
+- Jurgens_Irritable_bowel_syndrome
+- Jurgens_Migraine
+- Jurgens_Myocardial_infarction
+- Jurgens_Osteoarthritis
+- Jurgens_Osteoporosis
+- Jurgens_Pneumonia
+- Jurgens_Skin_cancer
+- Jurgens_Stroke
+- Jurgens_Venous_thromboembolism
 
 
 alpha: 0.05

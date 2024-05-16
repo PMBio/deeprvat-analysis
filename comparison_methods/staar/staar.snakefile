@@ -36,10 +36,10 @@ OLD_PHENOTYPES = [
     "Apolipoprotein_A",
     "Apolipoprotein_B",
     "Calcium",
-    "Cholesterol",
+    "Cholesterol_statin_corrected",
     "HDL_cholesterol",
     "IGF_1",
-    "LDL_direct",
+    "LDL_direct_statin_corrected",
     "SHBG",
     "Total_bilirubin",
     "Triglycerides",
@@ -67,9 +67,7 @@ NEW_PHENOTYPES = [
   "Creatinine",
   "Whole_body_fat_free_mass", 
   "Forced_expiratory_volume_in_1_second_FEV1",
-  "QTC_interval",
   "Glycated_haemoglobin_HbA1c",
-  "WHR",
   "WHR_Body_mass_index_BMI_corrected"
 ]
 
@@ -78,6 +76,7 @@ phenotypes_eval_dict = {'all_phenotypes':[*OLD_PHENOTYPES, *NEW_PHENOTYPES],
                     'new_phenotypes': NEW_PHENOTYPES,
                     'training_phenotypes': OLD_PHENOTYPES}
 
+phenotypes = OLD_PHENOTYPES
 
 # rule all:
 #     input:
@@ -86,7 +85,12 @@ phenotypes_eval_dict = {'all_phenotypes':[*OLD_PHENOTYPES, *NEW_PHENOTYPES],
 rule all:
     input:
         expand('replication_staar_{key}.Rds',
-                    key = phenotypes_eval_dict.keys())
+                    key = ['training_phenotypes'])
+# rule all:
+#     input:
+#         expand('replication_staar_{key}.Rds',
+#                     key = phenotypes_eval_dict.keys())
+
 
 rule replication:
     conda:
@@ -94,12 +98,7 @@ rule replication:
     input:
         expand(
             "{phenotype}/{mask}/results/burden_associations.parquet",
-            phenotype=NEW_PHENOTYPES,
-            mask=masks,
-        ),
-        expand(
-            "{phenotype}/{mask}/results/burden_associations_testing.parquet",
-            phenotype=OLD_PHENOTYPES,
+            phenotype=phenotypes,
             mask=masks,
         ),
     output:
@@ -118,28 +117,6 @@ rule replication:
 
 
 
-rule replication:
-    conda:
-        "r-env"
-    input:
-        expand(
-            "{phenotype}/{mask}/results/burden_associations.parquet",
-            phenotype=phenotypes,
-            mask=masks,
-        ),
-    output:
-        out_path="replication_staar.Rds",
-    params:
-        code_dir=pipeline_dir,
-        phenotypes=phenotypes,
-        masks=masks,
-        phenotype_suffix=''
-    threads: 1
-    resources:
-        mem_mb=32000,
-        load=16000,
-    script:
-        f"{pipeline_dir}/staar_replication.R"
 
 rule all_regression:
     priority: 100
@@ -229,7 +206,7 @@ rule all_data:
             chunk=range(n_chunks),
         ),
 
-
+# build-data --n-chunks 50 --chunk 0 --dataset-file LDL_direct/plof/association_dataset_pickled.pkl --data-file LDL_direct/plof/association_dataset_full.pkl LDL_direct/plof/config.yaml geno.h5 anno.h5 x.h5 y.h5
 rule build_data:
     input:
         data="{phenotype}/{mask}/association_dataset_full.pkl",
@@ -290,7 +267,7 @@ rule association_dataset:
         "{phenotype}/{mask}/config.yaml",
     output:
         full="{phenotype}/{mask}/association_dataset_full.pkl",
-        pickled="{phenotype}/{mask}/association_dataset_pickled.pkl",
+        pickled=temp("{phenotype}/{mask}/association_dataset_pickled.pkl"),
     threads: 1
     priority: 40
     resources:

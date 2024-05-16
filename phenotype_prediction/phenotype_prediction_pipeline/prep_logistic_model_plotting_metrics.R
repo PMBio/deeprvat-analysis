@@ -9,14 +9,10 @@ library(yardstick)
 
 phenotypes = snakemake@params[["phenotypes"]]
 logistic_model_res_path = snakemake@params[["input_res_path"]]
-fdr = snakemake@params[["fdr"]]#TODO remove this not actively used!
 phenotype_suffix = snakemake@params[["phenotype_suffix"]]
 top_bottom_q_vals = snakemake@params[["top_bottom_q_vals"]]
 top_quantiles = snakemake@params[["top_quantiles"]]
 out_dir = snakemake@params[["out_dir"]]
-code_dir = snakemake@params[["code_dir"]]
-######
-phenotypes <- phenotypes[dir.exists(paste0(logistic_model_res_path, "/", phenotypes))]
 log_info("Analysing {length(phenotypes)} phenotypes")
 
 
@@ -25,7 +21,7 @@ log_info("Analysing {length(phenotypes)} phenotypes")
 ##########################################
 
 
-GetRankedMetrics <- function(combined_res_ranked, fdr_rank_name = 'rank'){
+GetRankedMetrics <- function(combined_res_ranked){
   
   recomputeMetrics <- function(this_res, group_info){
     top_bottom_q = group_info$extreme_direction
@@ -53,25 +49,25 @@ GetRankedMetrics <- function(combined_res_ranked, fdr_rank_name = 'rank'){
     return(cbind(this_metrics, group_info))
   }
   
-  combined_metrics_list = combined_res_ranked %>% group_by(across(all_of(fdr_rank_name)), model_name, phenotype_col, top_quantile, extreme_direction) %>%
+  combined_metrics_list = combined_res_ranked %>% 
+    group_by(model_name, phenotype_col, top_quantile, extreme_direction) %>%
     group_map(recomputeMetrics)
   combined_metrics = do.call(rbind, combined_metrics_list) 
   return(combined_metrics)
 }
 
-combineModelResults <- function(phenotype, phenotype_suffix = NULL, top_q = NULL, fdr = 0.05, model_res_dir, use_rank = TRUE, top_bottom_q = "topq") {
-    fdr_rank_name = ifelse(use_rank, "rank", "fdr")
+combineModelResults <- function(phenotype, phenotype_suffix = NULL, top_q = NULL, model_res_dir,  top_bottom_q = "topq") {
     if (is.null(phenotype_suffix)) {
         this_res_files = list.files(paste(model_res_dir, phenotype, sep = "/"), full.names = TRUE)
 
     } else {
-        this_res_files = list.files(paste(model_res_dir, phenotype, sep = "/"), pattern = paste0(phenotype_suffix, "_", top_bottom_q, "-", top_q, "_", fdr_rank_name, "-", fdr), full.names = TRUE)
+        this_res_files = list.files(model_res_dir, pattern = paste0(phenotype, '_', phenotype_suffix, "_", top_bottom_q, "-", top_q), full.names = TRUE)
     }
     this_res_files = this_res_files[grepl(top_bottom_q, this_res_files)]
     print(paste("this res files", this_res_files))
 
-    this_res_files = this_res_files[grep(fdr_rank_name, this_res_files)]
-    print(paste("this res files", this_res_files))
+    # this_res_files = this_res_files[grep(fdr_rank_name, this_res_files)]
+    # print(paste("this res files", this_res_files))
     print(length(this_res_files))
     res_list = list()
     for (file in this_res_files) {
@@ -82,8 +78,8 @@ combineModelResults <- function(phenotype, phenotype_suffix = NULL, top_q = NULL
     print("combining data")
     combined_res = do.call(rbind, res_list)
     combined_res = combined_res %>%
-        mutate(extreme_direction = top_bottom_q, `:=`(!!fdr_rank_name, fdr))
-    print(combined_res[, c(fdr_rank_name, "model_name", "method", "phenotype_col", "top_quantile")] %>%
+        mutate(extreme_direction = top_bottom_q)
+    print(combined_res[, c("model_name", "method", "phenotype_col", "top_quantile")] %>%
         distinct())
     return(combined_res)
 }
@@ -95,10 +91,10 @@ for (phenotype in phenotypes) {
         for (top_bottom_q in top_bottom_q_vals) {
             log_info("getting combined res")
             log_info("{phenotype}, {top_q}, {top_bottom_q}")
-            combined_res = combineModelResults(phenotype = phenotype, phenotype_suffix = phenotype_suffix, top_q = top_q, model_res_dir = logistic_model_res_path, fdr = fdr, use_rank = FALSE, top_bottom_q = top_bottom_q)
+            combined_res = combineModelResults(phenotype = phenotype, phenotype_suffix = phenotype_suffix, top_q = top_q, model_res_dir = logistic_model_res_path,  top_bottom_q = top_bottom_q)
             # res_list = append(res_list, list(combined_res %>% mutate(phenotype = phenotype)))
 
-            metrics = GetRankedMetrics(combined_res, fdr_rank_name = "fdr")
+            metrics = GetRankedMetrics(combined_res)
             metrics_list = append(metrics_list, list(metrics %>%
                 mutate(phenotype = phenotype)))
 
@@ -108,11 +104,9 @@ for (phenotype in phenotypes) {
 
 log_info("Combining and saving data")
 combined_metrics = do.call(rbind, metrics_list)
-# combined_res = do.call(rbind, res_list)
 log_info("Writing data to {out_dir}")
 
-# saveRDS(combined_res, file.path(out_dir, paste0('combined_res_', phenotype_suffix, '_', fdr, '.Rds')))
-saveRDS(combined_metrics, file.path(out_dir, paste0("combined_metrics_", phenotype_suffix, "_", fdr, ".Rds")))
+saveRDS(combined_metrics, file.path(out_dir, paste0("combined_metrics_", phenotype_suffix, ".Rds")))
 
 log_info("Finished")
 
