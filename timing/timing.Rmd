@@ -440,7 +440,7 @@ getTimeComparisonMultipheno = function(gene_avg, mode, n_genes, n_phenotypes = 1
 ```{r}
 all_times_multipheno = tibble()
 n_genes = 20000 # considers 20k protein coding genes
-n_phenotypes = 50
+n_phenotypes = 34
 for (mode in  c('time_complete', 'time_test')){
   deeprvat_times = getDeepRvatTimesMultiPheno(gene_avg_deeprvat, mode, n_genes, n_phenotypes)
   deeprvat_types = c(deeprvat_times$deeprvat_type)
@@ -475,7 +475,7 @@ this_df_x_fold
 
 
 ```{r}
-n_phenotypes = 60 
+n_phenotypes = 34 
 all_times_multipheno = tibble()
 n_genes = 20000 # considers 20k protein coding genes
 for (mode in  c('time_complete', 'time_test')){
@@ -505,7 +505,7 @@ this_df_x_fold = this_df %>%
   mutate(time_x_val = paste0(round(time_x,0), 'x \n (', time_h, ' d)' ))
 this_df_x_fold
 
-# saveRDS(this_df_x_fold,'timing_data_x_fold_60_pheno.Rds') #to use for plotting of the main figure
+saveRDS(this_df_x_fold,'timing_data_x_fold_34_pheno.Rds') #to use for plotting of the main figure
 
 ```
 
@@ -520,7 +520,7 @@ p_pheno_x_fold = ggplot(this_df_x_fold %>% filter(mode == 'time_test' ) ,
   scale_color_manual(values = plot_colors_deeprvat, guide = 'none') + 
   scale_fill_manual(values = plot_colors_deeprvat, guide = 'none') + 
   geom_text(aes(label=time_x_val),vjust=-1, size = 5) + 
-  labs(y = 'Testing time per 100 phenotypes [s]', x = '', color = '') +
+  labs(y = 'Testing time per 34 phenotypes [s]', x = '', color = '') +
   scale_y_continuous(breaks = days_sec, labels = paste0(days, 'd'), expand = expansion(mult = c(0,0.3)))+ #, limits = c(0, max(days_sec))) +
   theme_cowplot() +
   theme(strip.background = facet_background,
