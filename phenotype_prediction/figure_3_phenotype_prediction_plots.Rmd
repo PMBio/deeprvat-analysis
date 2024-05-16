@@ -1,0 +1,999 @@
+---
+title: "DeepRVAT- Figure 3: Phenotype prediction"
+author: "Eva Holtkamp"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+library(cowplot)
+library(stringr)
+library(arrow)
+library(yardstick)
+library(gdata)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(latex2exp)
+
+options(dplyr.summarise.inform = FALSE)
+
+```
+
+```{r}
+source(file.path('../phenotypes.R'))
+```
+
+
+```{r}
+exp_dir = 'phenotype_prediction_exp/' #directory where 
+burden_heritability_download_dir = "" # path were Supp. table from Weiner et al. has been downloaded (needed for supp figure.  https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-022-05684-z/MediaObjects/41586_2022_5684_MOESM4_ESM.xlsx)
+
+```
+
+```{r}
+source('figure3_paths.R')
+source('figure_paths.R')
+```
+
+
+
+```{r}
+font_size <- 10
+title_font_size = 12
+font_family <- "Helvetica"
+plot_font <- element_text(size = font_size, family = font_family)
+
+base_theme <- theme(
+    text = element_text(size = font_size, family = font_family),
+    axis.text = element_text(size = font_size, family = font_family),
+    axis.title = element_text(size = font_size + 2, family = font_family),
+
+    strip.text.x = element_text(size = font_size + 2, family = font_family),
+    strip.text.y = element_text(size = font_size + 2, family = font_family),
+    
+    legend.title=element_blank(),
+    panel.background = element_rect(fill='transparent'), #transparent panel bg
+    plot.background = element_rect(fill='transparent', color=NA, linewidth = 0), #transparent plot bg
+    legend.background = element_rect(fill='transparent'), #transparent legend bg
+    legend.box.background = element_rect(fill='transparent', color=NA), #transparent legend panel,
+)
+base_theme_wo_strip <- theme(
+    text = element_text(size = font_size, family = font_family),
+    axis.text = element_text(size = font_size, family = font_family),
+    axis.title = element_text(size = font_size + 2, family = font_family),
+
+    strip.text.x = element_blank(),
+    strip.text.y = element_blank(),
+    legend.title=element_blank(),
+    panel.background = element_rect(fill='transparent'), #transparent panel bg
+    plot.background = element_rect(fill='transparent', color=NA, linewidth = 0), #transparent plot bg
+    legend.background = element_rect(fill='transparent'), #transparent legend bg
+    legend.box.background = element_rect(fill='transparent', color=NA), #transparent legend panel
+)
+```
+
+```{r}
+paper_plots = list()
+```
+
+
+
+```{r}
+linear_model_res_path = file.path(exp_dir, 'models/linear_models')
+phenotype_suffix = 'qt'
+gene_list_renamer = c('Burden/SKAT combined', 'DeepRVAT discoveries')
+names(gene_list_renamer) = c('baseline_only', 'deeprvat_discoveries')
+
+```
+
+```{r}
+
+all_combined_metrics = readRDS(file.path(linear_model_res_path, 'plotting_data', paste0('all_recomputed_metrics_test_', phenotype_suffix,'.Rds'))) 
+all_combined_metrics %>% distinct(model_name)
+```
+
+```{r}
+baseline_btypes = as.character(all_combined_metrics %>% distinct(model_name) %>% pull(model_name))
+baseline_btypes =  unique(sapply(strsplit(baseline_btypes, "-"), function(x) x[1]))
+baseline_btypes = grep('covariates|deeprvat', baseline_btypes, value = TRUE, invert = TRUE)
+
+method_gene_list_filter = quo((`rare_burden` %in% baseline_btypes & gene_list == 'baseline_only') | (`rare_burden` == 'deeprvat' & gene_list == 'deeprvat_discoveries'))
+method_gene_list_filter
+```
+
+
+## Plotting 
+```{r}
+label_default_size = 14 
+default_plot_width = 15.5 
+
+
+method_names = c("cadd" = 'CADD',
+                 "plof" = 'pLOF',
+                 "polyphen" = 'PolyPhen2',
+                "primateai" = 'PrimateAI',
+                "sift"= 'SIFT',
+                "splicai" = 'SpliceAI',
+                'deeprvat' = 'DeepRVAT',
+                'covariates-PRS' = 'common PRS',
+                'alphamissense' = 'AlphaMissense',
+                'absplice' = 'AbSplice')
+
+viridis_colors = viridis::viridis(n = length(baseline_btypes) + 4)
+viridis_colors  = viridis::viridis(n = length(baseline_btypes))
+deeprvat_color = '#7A2961'
+common_prs_color = 'darkgoldenrod2'
+
+
+
+RmUnderscore <- function(string) {
+  sub("_", " ", string)
+}
+remove_x_underscore = scale_x_discrete(labels = ~ gsub("_", " ", .x)) 
+remove_y_expand = scale_y_continuous(labels = scales::percent, expand =  expansion(mult = c(0, 0.1)))
+
+facet_background = strip.background = element_rect(fill = "white", colour = "black", 
+                linewidth = rel(2))
+```
+
+# Load and prepare data
+
+## linear model results
+```{r}
+model_order = c("covariates", "covariates-PRS", baseline_btypes, "deeprvat")
+model_order
+
+all_combined_metrics = all_combined_metrics %>% 
+  mutate(gene_list = ifelse(grepl('covariates', model_name), 'None', str_split(model_name, '-',  simplify = TRUE)[,2]))
+
+#dummy rows for covariates for all gene lists
+covariates_res = all_combined_metrics %>% filter(grepl('covariates', model_name))
+for (this_gene_list in unique(all_combined_metrics$gene_list)){
+  all_combined_metrics = rbind(all_combined_metrics, covariates_res %>% mutate(gene_list = this_gene_list))
+}
+covariates_res
+
+all_combined_metrics =  all_combined_metrics %>%
+  separate(model_name, c('one', 'two'), sep = '-', remove = FALSE) %>%
+  rowwise() %>%
+  mutate(model = case_when(
+    model_name == 'covariates-PRS' ~ model_name,
+    TRUE ~ one
+  )) %>%
+  ungroup() %>% 
+  select(-one, -two) %>%
+  filter(!grepl('None', gene_list))  %>%
+  select(-top_quantile) %>%
+  filter(model %in% model_order)
+all_combined_metrics[['model']] =  factor(all_combined_metrics[['model']], model_order)
+
+all_combined_metrics %>% distinct(phenotype)
+```
+
+
+```{r}
+unique(all_combined_metrics$model)
+delta_df = all_combined_metrics %>%
+  select(-model_name, - method) %>%
+  pivot_wider(names_from = model, values_from = .estimate) %>%
+  pivot_longer(all_of(grep('covariates', model_order, invert = TRUE, value = TRUE)),
+               names_to = 'rare_burden', values_to = 'r2_rare') %>%
+  mutate(delta_r2 = r2_rare - `covariates-PRS`) %>%
+  mutate(ratio_r2 = delta_r2/`covariates-PRS` ) # %>%
+delta_df %>% filter(.metric == 'rsq')
+
+
+all_combined_metrics %>% filter(grepl('covariates', model_name))
+
+```
+
+```{r}
+method_map =  c('topq' = 'Top', 'bottomq' = 'Bottom', 'both' = 'highest/largest')
+```
+
+## logistic model results
+```{r}
+logistic_model_res_path = file.path(exp_dir, 'models/logistic_models/')
+
+
+logistic_model_metrics = readRDS(file.path(logistic_model_res_path, 'plotting_data', paste0('combined_metrics_', phenotype_suffix,'.Rds'))) 
+
+logistic_model_metrics = logistic_model_metrics %>% 
+  separate(model_name, c('one', 'gene_list'), sep = '-', remove = FALSE) %>%
+  rowwise() %>%
+  mutate(rare_burden = case_when(
+    model_name == 'covariates-PRS' ~ model_name,
+    TRUE ~ one
+  )) %>%
+  ungroup() %>% 
+  select(-one) 
+logistic_model_metrics %>% distinct(rare_burden)
+
+
+covariates_res = logistic_model_metrics %>% filter(grepl('covariates', model_name))
+for (this_gene_list in na.omit(unique(logistic_model_metrics$gene_list))){
+  logistic_model_metrics = rbind(logistic_model_metrics, covariates_res %>% mutate(gene_list = this_gene_list))
+}
+logistic_model_metrics = drop_na(logistic_model_metrics, gene_list)
+rare_burden_models = grep('covariates', unique(logistic_model_metrics$rare_burden), invert = TRUE, value = TRUE)
+
+logistic_model_metrics %>% distinct(rare_burden)
+
+delta_df_logistic = logistic_model_metrics %>% select( -model_name) %>%
+  distinct() %>% 
+  pivot_wider(names_from = rare_burden, values_from = .estimate) %>%
+  pivot_longer(rare_burden_models,
+               names_to = 'rare_burden', values_to = 'auprc_rare') %>%
+  mutate(delta_auprc = auprc_rare - `covariates-PRS`,
+         ratio_delta_auprc = (auprc_rare - `covariates-PRS`)/ `covariates-PRS`)
+
+delta_df_logistic %>% distinct(rare_burden, gene_list)
+delta_df_logistic = delta_df_logistic %>% mutate(extreme_quantile_str = paste0(top_quantile * 100, '%'))
+delta_df_logistic[['extreme_direction_string']] = method_map[as.character(delta_df_logistic[['extreme_direction']])]
+delta_df_logistic = delta_df_logistic %>% mutate(outlier_mode_name = paste(extreme_direction_string, extreme_quantile_str)) 
+delta_df_logistic %>% distinct(phenotype)
+delta_df_logistic %>% distinct(top_quantile)
+```
+
+```{r}
+logistic_model_metrics %>% distinct(rare_burden)
+```
+
+## Replication in extreme quantiles plot
+
+data generated in in genopheno/phenotype_prediction/replication_in_extremes_plot.R
+```{r}
+
+extreme_quantiles = c(0.01)
+ranked_df_list = list()
+for (outlier_mode in c('topq', 'bottomq')){
+  for (extreme_quantile in extreme_quantiles){
+      if (outlier_mode == 'both'){
+        #here in total extreme_quantile *2 percent have the data been used (exreme_quantile % at each extreme)
+        file_path = file.path(linear_model_res_path, 'plotting_data', 'replication_in_extreme', paste0('ranked_df_combined_', 
+                                                    outlier_mode, '_', extreme_quantile, '_x2_', phenotype_suffix,'.Rds'))
+      }else{
+        file_path = file.path(linear_model_res_path, 'plotting_data', 'replication_in_extreme', paste0('ranked_df_combined_', 
+                                            outlier_mode, '_', extreme_quantile, '_', phenotype_suffix,'.Rds'))
+      }
+      ranked_df = readRDS(file_path)
+      ranked_df_list = append(ranked_df_list, list(ranked_df))
+  }
+}
+
+ranked_df_combined = do.call(rbind, ranked_df_list) %>%
+  mutate(extreme_quantile_str = paste0(extreme_quantile * 100, '%'))
+ranked_df_combined[['outlier_mode']] = factor(method_map[ranked_df_combined[['outlier_mode']]], levels = method_map)
+
+ranked_df_combined_avg = ranked_df_combined %>% group_by(`Rare estimator`, max_rank, extreme_quantile, extreme_quantile_str, outlier_mode) %>%
+  summarise(sum = mean(sum)) %>% mutate(phenotype = 'All Traits') %>%
+  mutate(outlier_mode_name = paste(outlier_mode, extreme_quantile_str))
+ranked_df_combined_avg %>% ungroup() %>% distinct(`Rare estimator`)
+```
+
+
+run genopheno/phenotype_prediction/plot_enrichment_prs_vs_szsore.R
+```{r}
+
+enrichment_list = list()
+for (this_quantile in c(0.99, 0.999)){
+  this_enrichment = readRDS(file.path(linear_model_res_path, 'plotting_data', paste0('enrichment_prs_vs_zscore_', 
+                                                                                   this_quantile, '_', phenotype_suffix,'.Rds')))
+  enrichment_list = append(enrichment_list, list(this_enrichment))
+}
+enrichment_combined = do.call(rbind, enrichment_list)
+
+
+enrichment_combined %>% distinct(phenotype)
+
+```
+
+
+## enrichment in extreme phenotypes
+
+```{r}
+zero_refernce = enrichment_combined %>% filter(min_z_score == 0) %>%
+  mutate(prop_zero = extremes/size) %>%
+  select(-size, -extremes, -min_z_score)
+
+enrich_score_df = enrichment_combined %>% 
+  filter(min_z_score > 0) %>%
+  merge(zero_refernce, how = 'left') %>%
+  mutate(prop_extreme_samples = extremes/size,
+         enrichment = prop_extreme_samples/prop_zero) %>%
+  mutate(prs_quantile = paste0(prs_quantile * 100, '% quantile'))
+
+enrich_score_df[!complete.cases(enrich_score_df), ]
+
+
+avg_rel_improvement_df = enrich_score_df  %>% select(model, prs_quantile, min_z_score, enrichment, phenotype) %>%
+  pivot_wider(names_from = model, values_from = enrichment) %>% 
+  pivot_longer(cols = c(baseline_btypes, 'deeprvat'), names_to = 'model') %>%
+  mutate(improvment_common = value - `covariates-PRS`, rel_improvment_common = improvment_common/`covariates-PRS`) %>%
+  group_by(model, prs_quantile, min_z_score) %>%
+  summarise(rel_improvment_common = mean(rel_improvment_common), improvment_common = mean(improvment_common)) %>%
+  ungroup()
+
+enrich_score_avg_df = enrich_score_df %>% 
+  group_by(model_name, model, burden,  prs_quantile, min_z_score) %>%
+  summarise(enrichment = mean(enrichment)) %>%
+  ungroup()
+
+enrich_score_df %>% filter(min_z_score > 0 & min_z_score < 0.004 & model == 'deeprvat' & prs_quantile == '99% quantile') 
+```
+
+### get largest threshold where enrichment for no phenotype/method is 0
+```{r}
+threshold_range <- seq(1, 4, by = 0.01)
+
+# Initialize the max_z_score variable
+max_z_score <- 0
+
+# Iterate over each threshold in the range
+for (threshold in threshold_range) {
+  filtered_df <- enrich_score_df[enrich_score_df$min_z_score <= threshold, ]
+  
+  if (all(filtered_df$enrichment != 0)) {
+    max_z_score <- threshold
+  }
+}
+
+# Print the largest threshold at which no value in Value2 is zero
+print(max_z_score)
+```
+
+## Main figures
+
+```{r}
+## determine boxplot order (lowest to highest median from linear models)
+method_order = delta_df %>%
+             filter(.metric == 'rsq') %>%
+               filter(!! method_gene_list_filter) %>%
+  group_by(rare_burden) %>%
+  summarise(med = median(ratio_r2)) %>% arrange(med) %>%
+  pull(rare_burden)
+
+method_order
+
+color_mapping = c(tail(viridis_colors, -4), deeprvat_color, common_prs_color)
+color_mapping = c(head(viridis_colors, length(method_order) -1 ), 
+                  deeprvat_color, common_prs_color)
+names(color_mapping) = c(names(method_names[method_order]), 'covariates-PRS')
+
+color_mapping
+
+color_mapping_sub = color_mapping[grep('_', names(color_mapping), invert = TRUE)]
+
+rare_method_fill = scale_fill_manual(values = color_mapping)
+rare_method_color = scale_fill_manual(values = color_mapping)
+```
+
+```{r}
+# mean and median imporovement
+delta_df %>%
+             filter(.metric == 'rsq') %>%
+               filter(!! method_gene_list_filter) %>% 
+  group_by(rare_burden) %>%
+  summarise(median = median(ratio_r2)*100, mean = mean(ratio_r2)*100)
+```
+
+
+```{r}
+paper_plots = list()
+```
+
+
+```{r}
+delta_df %>%
+             filter(.metric == 'rsq') %>%
+               filter(!! method_gene_list_filter ) %>% 
+  arrange(desc(ratio_r2))
+
+delta_df %>%
+             filter(.metric == 'rsq') %>%
+               filter(!! method_gene_list_filter ) %>% 
+  group_by(rare_burden) %>% 
+  summarize(median = median(ratio_r2))
+```
+
+
+ 
+```{r}
+compare_burdens = grep('deeprvat', unique(delta_df[['rare_burden']]), invert = TRUE, value = TRUE)
+
+result_df = delta_df %>% filter(.metric == 'rsq' & gene_list == 'baseline_only')
+
+runWilcoxPaired = function(result_df, metric_col,
+                           compare_burdens = c("absplice","alphamissense", "cadd","plof","polyphen","primateai","sift","splicai")){
+  all_res = tibble()
+  for (method in compare_burdens){
+    print(method)
+    v1 = result_df %>%
+      arrange(phenotype) %>%
+      filter(rare_burden == 'deeprvat') %>%
+      pull(metric_col)
+    
+    v2 =  result_df %>%
+      arrange(phenotype) %>%
+      filter(rare_burden == method) %>% 
+      pull(metric_col)
+    
+    t = wilcox.test(v2, v1, alternative = 'less', paired = TRUE)
+    res = tibble(b_da = 'deeprvat', b_alt = method, pval = t$p.value)
+    all_res = rbind(all_res, res)
+    print(t$p.value)
+  }
+  return(all_res)
+}
+
+```
+
+
+```{r}
+compar_lin = runWilcoxPaired(delta_df %>%
+             filter(.metric == 'rsq') %>%
+               filter(!! method_gene_list_filter), metric_col = 'ratio_r2')
+
+runWilcoxPaired(delta_df %>% filter(.metric == 'rsq' & gene_list == 'deeprvat_discoveries'),metric_col = 'ratio_r2')
+runWilcoxPaired(delta_df %>% filter(.metric == 'rsq' & gene_list == 'baseline_only'),metric_col = 'ratio_r2')
+
+arrange(compar_lin, pval)
+```
+
+
+```{r}
+n_items = round(length(unique(delta_df[['rare_burden']])) /2, 0)
+p_box_lin = ggplot(data=delta_df %>%
+             filter(.metric == 'rsq') %>%
+               filter(!! method_gene_list_filter)) +
+          geom_boxplot(aes(y=ratio_r2, x = rare_burden, color = rare_burden)) +
+          # rare_method_fill +
+          labs( y= expression(paste("Relative \u2206", R^2)), fill = 'Rare variant \nscoring method', x = '') + # 'Relative  \u2206  R2'
+          scale_x_discrete(limits = c(head(baseline_btypes, n_items), 'deeprvat', tail(baseline_btypes, -n_items)),
+                             labels = method_names) +
+          scale_fill_manual(values = color_mapping, limits = names(color_mapping),labels = names(color_mapping), guide = 'none') + #limits = c(baseline_btypes, 'deeprvat')
+          scale_color_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') + #limits = c(baseline_btypes, 'deeprvat') +
+          theme_cowplot() +
+          remove_y_expand +
+          theme(axis.text.x = element_text(angle = 44,  hjust =1)) +
+          geom_bracket(data = compar_lin, aes(xmin = b_da, xmax = b_alt, label = signif(pval, 2)), y.position = 0.05, step.increase = 0.1)
+
+print(p_box_lin)
+
+# paper_plots[['linear_boxplot']] = p_box_lin
+```
+
+
+
+```{r}
+
+# only inidicate if DeepRVAT  is not significantly larger than others 
+p_box_lin_ns_mark_only = ggplot(data=delta_df %>%
+             filter(.metric == 'rsq') %>%
+               filter(!! method_gene_list_filter),
+           aes(y=ratio_r2, x = rare_burden, color = rare_burden)) +
+          geom_boxplot() +
+          # rare_method_fill +
+          labs( y= expression(paste("Relative \u2206", R^2)), fill = 'Rare variant \nscoring method', x = '') + # 'Relative  \u2206  R2'
+          scale_x_discrete(limits = method_order,
+                             labels = method_names) +
+          scale_fill_manual(values = color_mapping, limits = names(color_mapping),labels = names(color_mapping), guide = 'none') +
+          scale_color_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') +
+          theme_classic() +
+          base_theme_wo_strip +
+          remove_y_expand +
+          theme(axis.text.x = element_text(angle = 44,  hjust =1)) 
+          # everything is siginificant ( p> 0.05) so no brackets needed and plotting gives an error if the data frame es empty 
+          # geom_bracket(data = compar_lin %>% filter(pval > 0.05), aes(xmin = g1, xmax = g2, label = signif(pval, 2)), y.position = 0.05, step.increase = 0.1)
+
+print(p_box_lin_ns_mark_only)
+paper_plots[['linear_boxplot']] = p_box_lin_ns_mark_only
+```
+
+
+
+
+
+
+### check effect of gene lists on significance
+```{r}
+this_top_quantile = 0.01
+
+for (top_bottom_q in c('bottomq', 'topq')){
+  print("deeprvat_discoveries")
+  res = runWilcoxPaired(delta_df_logistic %>%
+     filter(extreme_direction == top_bottom_q & top_quantile == this_top_quantile) %>%
+         filter(.metric == 'pr_auc') %>%
+           filter(gene_list == 'deeprvat_discoveries'), metric_col = 'ratio_delta_auprc')
+  
+  print(res %>% filter(pval> 0.05))
+  print("baeline discoveries")
+
+  res = runWilcoxPaired(delta_df_logistic %>%
+       filter(extreme_direction == top_bottom_q & top_quantile == this_top_quantile) %>%
+           filter(.metric == 'pr_auc') %>%
+             filter(gene_list == 'baseline_only'), metric_col = 'ratio_delta_auprc')
+  print(res %>% filter(pval> 0.05))
+    
+}
+```
+
+
+## Logistic model
+```{r}
+this_top_quantile = 0.01
+p_box_list = list()
+n = 0
+for (top_bottom_q in c('bottomq', 'topq')){
+  plot_df = delta_df_logistic %>%
+     filter(extreme_direction == top_bottom_q & top_quantile == this_top_quantile) %>%
+         filter(.metric == 'pr_auc') %>%
+           filter(!! method_gene_list_filter)
+  
+  # method_order = plot_df %>%
+  #           group_by(rare_burden) %>%
+  #           summarise(med = median(ratio_delta_auprc)) %>% arrange(med) %>%
+  #           pull(rare_burden)
+  
+  test_metrics = runWilcoxPaired(plot_df, metric_col = 'ratio_delta_auprc')
+  test_metrics = test_metrics %>% filter(pval > 0.05)
+  y_bracket = quantile(plot_df[['ratio_delta_auprc']], 0.996)
+  p_box = ggplot(data= plot_df) +
+            # geom_boxplot(aes(x = rare_burden, y = ratio_delta_auprc), outliers = FALSE)
+            geom_boxplot(aes(x = rare_burden,  y = ratio_delta_auprc, color = rare_burden)) +
+            geom_hline(yintercept = 0, color = 'grey60') +
+            facet_wrap(vars(outlier_mode_name), nrow = 1) +
+          scale_x_discrete(limits = method_order,
+                             labels = method_names) +
+          scale_fill_manual(values = color_mapping, limits = names(color_mapping),labels = names(color_mapping), guide = 'none') +
+          scale_color_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') +
+          theme_classic() +
+          base_theme +
+          labs( y= expression(paste("Relative \u2206AUPRC")), 
+                fill = 'Rare variant \nscoring method', x = '') + # 'Relative  \u2206  R2'
+            scale_y_continuous(labels = scales::percent) +
+           theme(axis.text.x = element_text(angle = 44,  hjust =1), strip.background = element_blank())
+  if (nrow(test_metrics) > 0){
+    p_box =  p_box + geom_bracket(data = test_metrics, aes(xmin = b_da, xmax = b_alt, label = "NS"), 
+                                  y.position = y_bracket, step.increase = 0.1, label.size = 3)
+  }       
+     
+  if (n > 0){
+    p_box = p_box + theme(axis.title.y = element_blank())
+  }
+  p_box_list = append(p_box_list, list(p_box))
+  n = n +1
+}
+box_combined = ggarrange(plotlist = p_box_list)
+paper_plots[['box_logistic']] = box_combined
+box_combined
+```
+
+
+
+```{r}
+delta_df_logistic %>%
+     filter(extreme_direction == 'bottomq' & top_quantile == this_top_quantile) %>%
+         filter(.metric == 'pr_auc') %>%
+           filter(!! method_gene_list_filter) %>% arrange(desc(ratio_delta_auprc))
+```
+
+```{r}
+delta_df_logistic %>%
+     filter(top_quantile == this_top_quantile) %>%
+    filter(.metric == 'pr_auc') %>%
+           filter(!! method_gene_list_filter) %>% 
+  arrange(desc(ratio_delta_auprc))
+```
+
+
+
+
+```{r}
+n_test_samples = 224817
+this_extreme_quantile = '1%'
+max_x_rank = n_test_samples * 0.01
+outlier_modes_to_keep = c('Top', 'Bottom')
+
+p <- ggplot(data = ranked_df_combined_avg %>% 
+  filter(extreme_quantile_str == this_extreme_quantile & outlier_mode %in% outlier_modes_to_keep) %>%
+    filter(max_rank <= max_x_rank)#%>% 
+    #filter(`Rare estimator` %in% c('plof', 'deeprvat'))
+  , aes(x = max_rank, y = sum, color = `Rare estimator`)) +
+  # geom_point(size = 0.2) +
+  geom_line() +
+  facet_wrap(vars(outlier_mode_name),
+             scales = 'free')     +
+  scale_color_viridis_d() + 
+  scale_color_manual(values = color_mapping, guide = 'none') +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dotted', color = 'grey') +
+  annotate("segment", x = -Inf, xend = Inf, y = -Inf, yend = -Inf) +
+  annotate("segment", x = -Inf, xend = -Inf, y = -Inf, yend = Inf) +
+  theme_classic() +
+  base_theme +
+  theme(
+        # strip.text = element_text(size = 10),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_blank()) +
+  labs(y = 'Individuals with \n extreme phenotype', x = TeX(r'(Rank ($\Delta_{common - rare~PRS})$)')) #+
+  #guides(color = 'none')
+
+p
+paper_plots[['extreme_prediction']] = p
+
+```
+
+
+
+
+```{r}
+rare_burdens = delta_df %>% distinct(rare_burden) %>% pull
+p_legend = ggplot(data=delta_df %>% 
+               filter(rare_burden != 'missense') %>%
+               filter(gene_list == 'deeprvat_discoveries' & .metric == 'rsq'), 
+           aes(x=phenotype, y=delta_r2, fill = rare_burden)) +
+          geom_bar(stat="identity", position=position_dodge()) + 
+          scale_fill_manual(values = color_mapping[rare_burdens], limits = rare_burdens, labels = method_names[rare_burdens], breaks = rare_burdens) + 
+          theme_classic() +
+          base_theme_wo_strip +
+          theme(axis.text.x = element_text(angle = 44,  hjust =1, size = font_size),
+                legend.key.size = unit(0.3, "cm"),
+                legend.position="bottom",
+                legend.title = element_blank(),
+                legend.box.margin = margin(0,0,0,1)) #+
+          # guides(fill = guide_legend(nrow = 1))
+print(p_legend)
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+mylegend<-g_legend(p_legend)
+mylegend
+paper_plots[['legend']] = mylegend
+```
+
+
+```{r}
+methods =  avg_rel_improvement_df %>% distinct(model) %>% pull(model)
+p = ggplot(data = avg_rel_improvement_df %>% filter(min_z_score <= max_z_score & prs_quantile == '99% quantile'),
+         aes(x = min_z_score, y = rel_improvment_common, color = model)) +
+  # geom_point(size = 0.2) +
+  geom_line(size = 0.3) +
+  theme_classic() +
+  base_theme_wo_strip +
+  scale_color_manual(values = color_mapping[methods], limits = methods,
+                     labels = method_names[methods], guide = 'none') +
+  #labs(x = 'Phenotype outlier (z-score)', y = 'Relative enrichment vs baseline', color = '', linetype = '') +
+  labs(x = 'Phenotype cutoff (minimal z-score)', y = 'Relative enrichment \n for top 1% prediction', color = '', linetype = '') +
+
+  scale_y_continuous(labels = scales::percent) #+
+
+
+paper_plots[['extreme_enrichment']] = p 
+p
+avg_rel_improvement_df %>% filter(min_z_score <= max_z_score & min_z_score > max_z_score - 0.005 & prs_quantile == '99% quantile') %>% arrange(desc(rel_improvment_common))
+```
+
+```{r}
+ ggplot(data = avg_rel_improvement_df %>% filter(min_z_score <= max_z_score & prs_quantile == '99% quantile'),
+         aes(x = min_z_score, y = rel_improvment_common, color = model)) +
+  # geom_point(size = 0.2) +
+  geom_line(size = 0.3) +
+  theme_classic() +
+  base_theme_wo_strip +
+  scale_color_manual(values = color_mapping[methods], limits = methods,
+                     labels = method_names[methods]) +
+  labs(x = 'Phenotype cutoff (minimal z-score)', y = 'Relative enrichment \n for top 1% prediction', color = '', linetype = '') +
+  #labs(x = 'Phenotype outlier (z-score)', y = 'Relative enrichment vs baseline', color = '', linetype = '') +
+  scale_y_continuous(labels = scales::percent) +
+  theme(legend.position = c(0.2, 0.5))
+```
+
+## Arrange main figure
+```{r}
+rare_burdens = delta_df %>% distinct(rare_burden) %>% pull
+p_legend = ggplot(data=delta_df %>% 
+               filter(rare_burden != 'missense') %>%
+               filter(gene_list == 'deeprvat_discoveries' & .metric == 'rsq'), 
+           aes(x=phenotype, y=delta_r2, fill = rare_burden)) +
+          geom_bar(stat="identity", position=position_dodge()) + 
+          scale_fill_manual(values = color_mapping[rare_burdens], limits = rare_burdens, labels = method_names[rare_burdens], breaks = rare_burdens) + 
+          theme_classic() +
+          base_theme_wo_strip +
+          theme(axis.text.x = element_text(angle = 44,  hjust =1, size = font_size),
+                legend.key.size = unit(0.3, "cm"),
+                legend.text = element_text(size = title_font_size),
+                legend.position="bottom",
+                legend.title = element_blank(),
+                legend.box.margin = margin(0,0,0,1)) #+
+          # guides(fill = guide_legend(nrow = 1))
+print(p_legend)
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+mylegend<-g_legend(p_legend)
+mylegend
+paper_plots[['legend']] = mylegend
+```
+
+```{r}
+
+
+(1/6) * 2
+lay <- rbind(c(NA,NA,NA,NA,NA,NA,NA,NA,NA),
+             c(1,1,1,2,2,2,2,2,2),
+             c(NA,3,3,3,3,NA, 5, 5,5),
+             c(4,4,4,4,4,NA,5, 5,5))
+gt = grid.arrange(paper_plots[['linear_boxplot']],
+             paper_plots[['box_logistic']],
+            paper_plots[['legend']],
+             paper_plots[['extreme_prediction']],
+             paper_plots[['extreme_enrichment']] + theme(plot.margin = margin(0, 0.2, 0.9, 0, "cm")),
+          nrow = 4, ncol = 9,
+          layout_matrix = lay, heights = c(0.1,1.3,0.1,1),
+          widths = c(1,1,1,1,1,0.5,1,1,1))
+p = as_ggplot(gt) +                                # transform to a ggplot
+  draw_plot_label(label = c("a", "b", "c", "d"), size = 20,
+                  x = c(0.00, 3/9, 0.05, 5.7/9), y = c(1, 1,0.47, 0.47)) # Add labels
+
+ggsave(file.path(plot_dir, 'figure_4.png'), p, width = 24, height = 20, unit = 'cm')
+p
+```
+
+
+
+
+
+# Supplements
+
+## Gene list comparison
+```{r}
+
+  
+
+p_box_lin_gene_list = ggplot(data=delta_df %>%
+             filter(.metric == 'rsq'),
+           aes(y=ratio_r2, x = rare_burden, fill = gene_list)) +
+          geom_boxplot() +
+          # rare_method_fill +
+          labs( y= expression(paste("Relative \u2206", R^2)), fill = 'Gene list', x = '') + # 'Relative  \u2206  R2'
+          scale_x_discrete(limits = method_order,
+                             labels = method_names) +
+          scale_fill_brewer(palette = 'Pastel1', limits = names(gene_list_renamer), labels = gene_list_renamer) +   
+          theme_cowplot() +
+          remove_y_expand +
+          theme(axis.text.x = element_text(angle = 45,  hjust =1),
+                strip.background = facet_background)
+print(p_box_lin_gene_list)
+
+```
+
+```{r, eval=FALSE}
+delta_df_logistic %>% filter(is.na(metric))
+plot_df = delta_df_logistic %>%
+   filter(top_quantile == this_top_quantile) %>%
+       filter(.metric == 'pr_auc')
+
+p_box_log_gene_list = ggplot(#data=plot_df[plot_df[[metric]] <= y_max,],
+               data= plot_df,
+           aes_string(y = metric, x = 'rare_burden', fill = 'gene_list')) +
+          geom_boxplot() +
+          geom_hline(yintercept = 0, color = 'grey60') +
+          facet_wrap(vars(outlier_mode_name), nrow = 1) +
+          labs( y= expression(paste("Relative \u2206AUPRC")), 
+                fill = 'Gene list', x = '') + # 'Relative  \u2206  R2'
+          scale_x_discrete(limits = c(head(baseline_btypes, n_items), 'deeprvat', tail(baseline_btypes, -n_items)),
+                           labels = method_names) +
+          scale_fill_brewer(palette = 'Pastel1', limits = names(gene_list_renamer), labels = gene_list_renamer) +           # scale_color_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') + #limits = c(baseline_btypes, 'deeprvat')
+          theme_cowplot() +
+          scale_y_continuous(labels = scales::percent) +
+         theme(axis.text.x = element_text(angle = 44,  hjust =1),
+               strip.background = facet_background)
+print(p_box_log_gene_list)
+
+```
+
+
+```{r}
+p_box_list_supp = list()
+n = 0
+metric = "ratio_delta_auprc"
+for (top_bottom_q in c('bottomq', 'topq')){
+  plot_df = delta_df_logistic %>%
+     filter(extreme_direction == top_bottom_q & top_quantile == this_top_quantile) %>%
+         filter(.metric == 'pr_auc') %>%
+    filter(gene_list != 'PRS')
+  
+  
+  p_box_log_gene_list = ggplot(data=plot_df,
+           aes_string(y = metric, x = 'rare_burden', fill = 'gene_list')) +
+          geom_boxplot() +
+          geom_hline(yintercept = 0, color = 'grey60') +
+          facet_wrap(vars(outlier_mode_name), nrow = 1) +
+          labs( y= expression(paste("Relative \u2206AUPRC")), 
+                fill = 'Gene list', x = '') + # 'Relative  \u2206  R2'
+          scale_x_discrete(limits = method_order,
+                             labels = method_names) +
+          scale_fill_brewer(palette = 'Pastel1', limits = names(gene_list_renamer), labels = gene_list_renamer) +           # scale_color_manual(values = color_mapping, limits = names(color_mapping), guide = 'none') + #limits = c(baseline_btypes, 'deeprvat')
+          theme_cowplot() +
+          scale_y_continuous(labels = scales::percent) +
+         theme(axis.text.x = element_text(angle = 44,  hjust =1),
+               strip.background = facet_background) +
+    guides(fill = 'none')
+  
+  if(n > 0){
+    p_box_log_gene_list = p_box_log_gene_list + labs(y = '')
+  }
+  p_box_list_supp = append(p_box_list_supp, list(p_box_log_gene_list))
+  n = n + 1
+}
+p_box_log_gene_list = ggarrange(plotlist  = p_box_list_supp, common.legend = TRUE)
+
+p_box_log_gene_list
+```
+
+
+```{r}
+plot_width = 20
+p_box_gene_list = ggarrange(p_box_lin_gene_list , 
+          p_box_log_gene_list,   common.legend = TRUE,
+          widths = c(0.35, 0.65),
+          labels = 'auto',
+          font.label = list(size = plot_width/default_plot_width * label_default_size),
+          legend="bottom") 
+p_box_gene_list          
+ggsave(file.path(plot_dir, 'figure_4_supp_1.png'), width = plot_width, height = 12, unit = 'cm',
+       dpi = 600)
+# ggsave(file.path(plot_dir, 'figure_4_supp_1.pdf'), width = plot_width, height = 10, unit = 'cm',
+#        dpi = 600)
+
+```
+
+
+
+
+
+
+
+
+
+# Compare to burden heritability
+
+```{r}
+library(readxl)
+library(dplyr)
+
+```
+
+
+
+
+```{r}
+burden_her_file = file.path(burden_heritability_download_dir, "41586_2022_5684_MOESM4_ESM.xlsx")
+```
+
+```{r}
+phecode_dict = c(
+ 'Apolipoprotein_A'= 30630,
+ 'Apolipoprotein_B'= 30640,
+ 'Calcium'= 30680,
+ 'Cholesterol_statin_corrected'= 30690,
+ 'HDL_cholesterol'= 30760,
+ 'IGF_1'= 30770,
+ 'LDL_direct_statin_corrected'= 30780,
+ 'Lymphocyte_percentage'= 30180,
+ 'Mean_corpuscular_volume'= 30040,
+ 'Mean_platelet_thrombocyte_volume_(MPTV)'= 30100,
+ 'Mean_reticulocyte_volume'= 30260,
+ 'Neutrophill_count'= 30140,
+ 'Platelet_count'= 30080,
+ 'Platelet_crit'= 30090,
+ 'Platelet_distribution_width'= 30110,
+ 'Red_blood_cell_(erythrocyte)_count'= 30010,
+ 'SHBG'= 30830,
+  'Standing_height'= 50,
+ 'Total_bilirubin'= 30840,
+ 'Triglycerides'= 30870,
+ 'Urate'= 30880,
+ 'Body_mass_index_BMI'= 21001,
+ 'Glucose'= 30740,
+ 'Vitamin_D'= 30890,
+ 'Albumin'= 30600,
+ 'Total_protein'= 30860,
+ 'Cystatin_C'= 30720,
+ 'Gamma_glutamyltransferase'= 30730,
+ 'Alkaline_phosphatase'= 30610,
+ 'Creatinine'= 30700,
+ 'Whole_body_fat_free_mass'= 23101,
+ 'Forced_expiratory_volume_in_1_second_FEV1'= 20153,
+ 'Glycated_haemoglobin_HbA1c'= 30750,
+ 'Mean_platelet_thrombocyte_volume'= 30100,
+ 'Red_blood_cell_erythrocyte_count'= 30010
+)
+phecode_dict_df = tibble(phenotype = names(phecode_dict), phenocode = phecode_dict)
+```
+
+```{r}
+phenotype_key_df <- read_excel(burden_her_file, 
+    sheet = "ST5")
+
+burden_herit <- read_excel(burden_her_file, 
+    sheet = "ST8")
+```
+
+```{r}
+burden_herit_deeprvat = phecode_dict_df %>% left_join(phenotype_key_df %>% select(phenocode, phenotype_key)) %>% left_join(burden_herit)
+burden_herit_deeprvat
+phenotype_key_df %>% filter(phenocode %in% phecode_dict)
+```
+
+
+
+
+
+```{r}
+p_df = delta_df %>%
+  filter(rare_burden == 'deeprvat' & gene_list == 'deeprvat_discoveries'&`.metric` == 'rsq')%>% 
+  left_join(burden_herit_deeprvat) %>% 
+  drop_na(aggregated_h2)
+cor = round(cor(p_df[['delta_r2']], p_df[['aggregated_h2']], method = 'spearman'), 2)
+
+p_her = ggplot(p_df, aes(y = `delta_r2`, x = aggregated_h2))  + 
+  geom_point() +
+  theme_classic() +
+  theme(aspect.ratio = 1) +
+  labs( y= expression(paste("\u2206", R^2)), x = 'Burden heritability') +
+  annotate("text", y = 0.015, x =0.035, label = sprintf("r = %s", cor), hjust = 1, vjust = 1, size = 5)
+p_her  
+cor
+
+ggsave(file.path(plot_dir, 'figure_4_supp_2.png'), p_her, width = 10, height = 8, unit = 'cm',
+       dpi = 600)
+```
+
+## Supp tables
+
+```{r}
+this_top_quantile = 0.01 # for logistic models 
+
+col_renamer_linear = c(Trait = "phenotype", "Gene list" = "gene_list", "Rare burden type" = "rare_burden", "Metric" = ".metric", "Metric PRS" =  "covariates-PRS", "Metric rare burden" = "r2_rare", 
+  "Delta Metric (rare burden - PRS)" = "delta_r2", 
+  "Relative Delta Metric" = "ratio_r2")
+res_linear_model = delta_df %>% filter(.metric == 'rsq') %>%
+  filter(gene_list %in% names(gene_list_renamer)) %>% 
+  select(all_of(col_renamer_linear)) %>% 
+  mutate(`Prediction model` = "Linear model")
+
+col_renamer_logistic = c(Trait = "phenotype", "Gene list" = "gene_list","Metric" = ".metric", "Metric PRS" =  "covariates-PRS", "Metric rare burden" = "auprc_rare", 
+  "Delta Metric (rare burden - PRS)" = "delta_auprc", 
+  "Relative Delta Metric" = "ratio_delta_auprc", "Outlier quantile" = "outlier_mode_name")
+res_logistic_model = delta_df_logistic %>% filter(.metric == 'pr_auc' & top_quantile == this_top_quantile) %>%
+  filter(gene_list %in% names(gene_list_renamer)) %>% 
+  select(all_of(col_renamer_logistic)) %>% 
+  mutate(`Prediction model` = "Logistic model")
+
+res_prediction_models = bind_rows(res_linear_model, res_logistic_model)  %>% 
+  mutate(`Rare burden type` = method_names[as.character(`Rare burden type`)]) %>%
+  mutate(`Gene list` = gene_list_renamer[as.character(`Gene list`)]) %>% 
+  mutate(Trait = gsub('_', ' ', Trait)) %>%
+  mutate(Trait =  ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait))
+
+res_prediction_models
+```
+
+
+```{r}
+write.csv(res_prediction_models,
+              file.path(supp_table_dir, 'phenotype_prediction_metrics.csv'),
+          row.names = FALSE)
+
+```
+
