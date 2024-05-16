@@ -505,7 +505,11 @@ this_df_x_fold = this_df %>%
   mutate(time_x_val = paste0(round(time_x,0), 'x \n (', time_h, ' d)' ))
 this_df_x_fold
 
+<<<<<<< HEAD
 saveRDS(this_df_x_fold,'timing_data_x_fold_34_pheno.Rds') #to use for plotting of the main figure
+=======
+saveRDS(this_df_x_fold,'timing_data_x_fold_60_pheno.Rds') #to use for plotting of the main figure
+>>>>>>> main
 
 ```
 
