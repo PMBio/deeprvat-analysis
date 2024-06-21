@@ -3,6 +3,13 @@
 DEEPRVAT_ANALYSIS_DIR = os.environ['DEEPRVAT_ANALYSIS_DIR']
 py_deeprvat_analysis = f'python {DEEPRVAT_ANALYSIS_DIR}'
 
+configfile: 'deeprvat_config.yaml'
+
+phenotypes = config['phenotypes']
+phenotypes = list(phenotypes.keys()) if type(phenotypes) == dict else phenotypes
+training_phenotypes = config["training"].get("phenotypes", phenotypes)
+n_repeats = config['n_repeats']
+
 rule plot:
     conda:
         "r-env"
@@ -13,11 +20,12 @@ rule plot:
                phenotype=phenotypes),
         replication = "replication.parquet"
     output:
-        "dicovery_replication_plot.png"
+        "discovery_replication_plot.png"
     params:
         results_dir = './',
         results_dir_pattern = '',
-        code_dir = f'{DEEPRVAT_ANALYSIS_DIR}/association_testing'
+        code_dir = f'{DEEPRVAT_ANALYSIS_DIR}/association_testing',
+        max_rank = 1000
     resources:
         mem_mb=20480,
         load=16000,
