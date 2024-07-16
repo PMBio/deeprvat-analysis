@@ -22,19 +22,19 @@ library(ggpubr)
 
 plot_data_path = "{path}" #this should be the same path as `r_plot_data_path` in config_eval of simulation/simulation_analysis
 
-
-plot_out_path = './plots'
+plot_dir = './plots'
 simulation_exp_dir = "{path}"  #this should be the same path as `sim_res_dir` in config_eval of simulation/simulation_analysis
 
 default_experiment = 'vary_proportion_causal_variants/prop_causal_variants:0.2_max_rare_af:0.001_var_genetic_effects:0.1_var_noise:0.95_var_expl_variant_noise:0.1_var_expl_cont:0.3_var_expl_binary:0.3_var_expl_maf:0.3'
 ```
+
 
 ```{r}
 font_size = 8
 font_family = "Helvetica"
 plot_font = element_text(size = font_size, family = font_family)
 label_default_size = 14 #default ggarrange size
-default_plot_width = 15.5 #used by brian
+default_plot_width = 15.5 
 
 ```
 
@@ -164,11 +164,15 @@ p_maf_filter_guide = ggplot(avg_metrics_maf_filter_combined %>% filter(metric ==
             # figure.size=c(10, 4.8)
         )
 p_maf_filter_guide = p_maf_filter_guide + scale_fill_manual(values=colors_methods, breaks = rev(names(colors_methods)), limits = rev(names(colors_methods)) )
-#ggsave(paste(plot_out_path, 'methods_legend_vertical.pdf', sep = '/'),p_maf_filter_guide, width = 6.6, height = 4.6)
+#ggsave(paste(plot_dir, 'methods_legend_vertical.pdf', sep = '/'),p_maf_filter_guide, width = 6.6, height = 4.6)
 ```
+
+
 ```{r}
 avg_metrics_maf_filter_combined
 ```
+
+
 ```{r}
 data_bar =  avg_metrics_maf_filter_combined %>% filter(metric == "Power_bf" & quantile == 0.5 & test %in% tests_to_keep)
 data_point = metrics_maf_filter_combined %>% filter(metric == "Power_bf" & quantile == 0.5 & test %in% tests_to_keep)
@@ -251,7 +255,7 @@ p_prop_hor = ggplot(var_grouped_data,
 p_prop_hor
 
 p_prop_hor_legend_horizontal = p_prop_hor + theme(legend.position="bottom")
-#ggsave(paste(plot_out_path, 'prop_hor_legend_horizontal.pdf', sep = '/'),p_prop_hor_legend_horizontal, width = 6.6, height = 4.6)
+#ggsave(paste(plot_dir, 'prop_hor_legend_horizontal.pdf', sep = '/'),p_prop_hor_legend_horizontal, width = 6.6, height = 4.6)
 
 ```
 
@@ -270,7 +274,7 @@ p_grid_maf_filter = grid.arrange(facet_top_title, facet_title_001, facet_title_0
                         c(1, 2, 3, NA),c(4,4,4, 5)),
                       heights = c(0.2, 0.2, 4), widths = c(3,3,3,3)) #widths = c(3,3,3,4.2)
 p_grid_maf_filter
-#ggsave(paste(plot_out_path, 'maf_filter_plot.pdf', sep = '/'),p_grid_maf_filter, width = 6.6, height = 4.6)
+#ggsave(paste(plot_dir, 'maf_filter_plot.pdf', sep = '/'),p_grid_maf_filter, width = 6.6, height = 4.6)
 ```
 
 # Proportion of causal variants
@@ -339,7 +343,7 @@ p_prop = ggplot(avg_vary_prop_causal %>% filter(metric == 'Power_bf' & test %in%
     #         axis.title = plot_font,
     #         legend.title = element_blank())
 p_prop
-#ggsave(paste(plot_out_path, 'proportion_of_causal_variants_plot.pdf', sep = '/'),p_prop, width = 8, height = 4) #, width = 8, height = 4, units = 'cm')
+#ggsave(paste(plot_dir, 'proportion_of_causal_variants_plot.pdf', sep = '/'),p_prop, width = 8, height = 4) #, width = 8, height = 4, units = 'cm')
 
 ```
 
@@ -404,7 +408,7 @@ p_replication =
     #     ) 
 
 p_replication
-#ggsave(paste(plot_out_path, 'replication_plot.pdf', sep = '/'),p_replication,  width = 8, height = 6, units = 'cm')
+#ggsave(paste(plot_dir, 'replication_plot.pdf', sep = '/'),p_replication,  width = 8, height = 6, units = 'cm')
 
 ```
 
@@ -471,7 +475,9 @@ lambda_df_plot = bind_rows(lambda_causal_non_causal %>% select(all_of(colnames(l
   summarize(lambda_str  = paste(lambda_str, collapse = '\n'))
 
 lambda_df
+
 ```
+
 
 
 ```{r}
@@ -569,6 +575,7 @@ for (this_method in levels(all_pvals$method)){
 qq_arange_causal_split = ggarrange(plotlist = p_list_causal_split, ncol = 2, nrow = 3) +
   theme(plot.margin = margin(1,1,0,1, "cm")) 
 # qq_arange_causal_split
+qq_arange_causal_split
 ```
 
 
@@ -616,6 +623,8 @@ box_plot_lambda = ggplot(lambda_df, aes(x = method, y = lambda, fill = method)) 
   theme(axis.text.x = element_text(angle = 45,  hjust =1)) 
   # geom_text(data= lambda_vals, mapping = aes(x = 1, y = 7, label= lambda), size = 12)
 box_plot_lambda
+
+lambda_df %>% group_by(method) %>% summarize(size = n())
 ```
 # Plot and save combined figures
 
@@ -637,7 +646,7 @@ p_grid_maf_filter = grid.arrange(facet_top_title, facet_title_001, facet_title_0
                        p_maf_filter, p_prop_hor + guides(fill = 'none'), layout_matrix = rbind(c(0,0,0, NA),
                          c(1, 2, 3, NA),c(4,4,4, 5)),
                        heights = c(0.2, 0.2, 4), widths = c(3,3,3,2)) #widths = c(3,3,3,4.2)
-# ggsave(file.path(plot_out_path, 'fig_2_b.png'), p_grid_maf_filter, width = 10, height = 9, unit = 'cm',
+# ggsave(file.path(plot_dir, 'fig_2_b.png'), p_grid_maf_filter, width = 10, height = 9, unit = 'cm',
 #        scale = )
 g_legend<-function(a.gplot){
    tmp <- ggplot_gtable(ggplot_build(a.gplot))
@@ -660,13 +669,13 @@ gt = grid.arrange(p_grid_maf_filter,
            layout_matrix = lay, heights = c(0.05,1, 0.1, 0.1),
            widths = c(0.8,0.8,1,1))
 p = as_ggplot(gt) 
-ggsave(file.path(plot_out_path, 'supp_fig_1_5.png'), p,
+ggsave(file.path(plot_dir, 'supp_fig_1_5.png'), p,
         width = 0.55 * plot_width,
         height = 20,
         unit = 'cm',
         dpi = 600)
 
-ggsave(file.path(plot_out_path, 'supp_fig_1_5.pdf'), p,
+ggsave(file.path(plot_dir, 'supp_fig_1_5.pdf'), p,
         width = 0.55 * plot_width,
         height = 20,
         unit = 'cm',
@@ -674,38 +683,7 @@ ggsave(file.path(plot_out_path, 'supp_fig_1_5.pdf'), p,
 ```
 
 
-
-
-## supp figure
-
 ```{r}
-box_plot_lambda = ggplot(lambda_df, aes(x = method, y = lambda, fill = method)) +
-  geom_boxplot() +
-  scale_fill_manual(values=colors_methods, guide = 'none') +
-  # labs(title='QQ plot (uncorrected p-values)') +
-  labs(x = '', y = TeX('Genomic inflation factor ($\\lambda$)')) +
-  theme_cowplot() +
-  theme(axis.text.x = element_text(angle = 45,  hjust =1)) 
-  # geom_text(data= lambda_vals, mapping = aes(x = 1, y = 7, label= lambda), size = 12)
-box_plot_lambda
-```
-
-
-```{r}
-
-# p = ggarrange(p_fdr_default_p_causal, box_plot_lambda, p_prop, p_replication, 
-#           nrow = 2, ncol =2 , labels = 'auto')
-
-
-lay = rbind(c(NA,NA,NA, NA, NA,NA),
-            c(1,1,1, NA, 2,2),
-            c(3,3,4, NA, 5, 5))
-deeprvat_legend = g_legend(deeprvat_legend_vert)
-
-p = grid.arrange(p_fdr_default_p_causal, box_plot_lambda, p_prop, deeprvat_legend, p_replication,
-          nrow = 3, ncol = 6,
-          layout_matrix = lay, heights = c(0.1, 1.5,1),
-          widths = c(1,1,1,0.2, 1,1))
 
 plot_width = 20
 
@@ -714,9 +692,9 @@ ggarrange( p_prop + labs(fill = '', color = ''), p_replication + labs(fill = '',
           font.label = list(size = plot_width/default_plot_width * label_default_size ))  
 
 
-ggsave(file.path(plot_out_path, 'supp_fig_1_6.png'), width = 8.88, height = 4.53,
+ggsave(file.path(plot_dir, 'supp_fig_1_6.png'), width = 8.88, height = 4.53,
        dpi = 600)
-ggsave(file.path(plot_out_path, 'supp_fig_1_6.pdf'), width = 8.88, height = 4.53,
+ggsave(file.path(plot_dir, 'supp_fig_1_6.pdf'), width = 8.88, height = 4.53,
        dpi = 600)
 ```
 
@@ -728,23 +706,10 @@ p = ggarrange(ggarrange(NA, NA, labels = c('a', 'b') ,font.label = list(size = p
           nrow =2, heights = c(0.1, 0.9))
 
 p
-ggsave(file.path(plot_out_path, 'supp_fig_1_4.png') , p,
+ggsave(file.path(plot_dir, 'supp_fig_1_4.png') , p,
        width = 25, height = 20, unit = 'cm',
        dpi = 600)
-ggsave(file.path(plot_out_path, 'supp_fig_1_4.pdf') , p,
-       width = 25, height = 20, unit = 'cm',
-       dpi = 600)
-
-```
-
-```{r}
-p_qq = ggarrange(plotlist = p_list_causal_split, ncol = 2, nrow = 3, common.legend = TRUE) 
-
-p = ggarrange(ggarrange(NA, NA, labels = c('a', 'b') ,font.label = list(size = plot_width/default_plot_width * label_default_size, ncol =2) , widths = c(1.5, 1)),
-          ggarrange( p_qq, box_plot_lambda + theme(plot.margin = margin(0, 0, 0, 1, unit = 'cm')), widths = c(1.5, 1)),
-          nrow =2, heights = c(0.1, 0.9))
-
-ggsave(file.path(plot_out_path, 'fig_2_supp_calibration.png') , p, 
+ggsave(file.path(plot_dir, 'supp_fig_1_4.pdf') , p,
        width = 25, height = 20, unit = 'cm',
        dpi = 600)
 
