@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import plotnine as p9
 import yaml
+from typing import Tuple
 from deeprvat.utils import pval_correction
 from tqdm import tqdm
 
@@ -23,14 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 
-PHENOTYPES = [
+train_phenotypes = [
     "Apolipoprotein_A",
     "Apolipoprotein_B",
     "Calcium",
-    "Cholesterol",
+    "Cholesterol_statin_corrected",
     "HDL_cholesterol",
     "IGF_1",
-    "LDL_direct",
+    "LDL_direct_statin_corrected",
     "SHBG",
     "Total_bilirubin",
     "Triglycerides",
@@ -46,16 +47,31 @@ PHENOTYPES = [
     "Neutrophill_count",
     "Red_blood_cell_erythrocyte_count",
 ]
+new_phenotypes = [  
+  "Body_mass_index_BMI",
+  "Glucose",
+  "Vitamin_D",
+  "Albumin",
+  "Total_protein",
+  "Cystatin_C",
+  "Gamma_glutamyltransferase",
+  "Alkaline_phosphatase",
+  "Creatinine",
+  "Whole_body_fat_free_mass", 
+  "Forced_expiratory_volume_in_1_second_FEV1",
+  "Glycated_haemoglobin_HbA1c"
+  ]
 
 
-
+PHENOTYPES = [*train_phenotypes, *new_phenotypes]
+PHENOTYPES = train_phenotypes
 
 METHODS = list(
     reversed(
         [f"{m} {t}" for m in ["Burden", "SKAT"] for t in ["pLOF", "missense"]]
         + [  # , '"likely deleterious"']] +
-            "Burden pLOF/missense",
-            "SKAT pLOF/missense",
+            # "Burden pLOF/missense",
+            # "SKAT pLOF/missense",
             "Burden/SKAT combined",
             "DeepRVAT",
         ]
@@ -137,10 +153,13 @@ def prep_for_rep_plot(
     skip_pheno_plots=True,
 ):
     replication_results = plotting_results.copy()
+    logger.info('Number of pvals per gene (sanity check)')
+    #should be max 1 except for burden/skat combined
+    print(plotting_results.groupby(['Method','phenotype', 'gene']).size().reset_index()\
+        .groupby('Method')[0].max())
     replication_results = replication_results.rename(
         columns={"experiment_group": "Method", "significant": "Significant"}
     )
-
     if method_mapping is not None:
         replication_results["Method"] = replication_results["Method"].apply(
             lambda x: method_mapping[x] if x in method_mapping else x
@@ -150,7 +169,6 @@ def prep_for_rep_plot(
     replication_results["Method"] = pd.Categorical(
         replication_results["Method"], categories=METHODS, ordered=True
     )
-
     # replication_results = results.query(f'((experiment_group == @selected_experiment and experiment == "DeepRVAT ({n_repeats} repeats)") or '
     #                                    '(experiment_group in @baseline_groups)) '
     #                                    ' and correction_method == "FDR"'
@@ -183,6 +201,7 @@ def prep_for_rep_plot(
         top_list.append(this_df)
 
     top = pd.concat(top_list)
+
     top["Significant"] = pd.Categorical(
         top["Significant"], categories=[True, False], ordered=True
     )
@@ -202,17 +221,18 @@ def prep_for_rep_plot(
 
 
 @click.command()
-@click.option("--out-dir", type=click.Path(exists=True), default=".")
+@click.option("--out-file", type=click.Path(), default="replication.parquet")
 @click.option("--recompute-comparison-results", is_flag=True)
-@click.option("--analyze-all-repeats", is_flag=True)
+# @click.option("--analyze-all-repeats", is_flag=True)
+@click.option("--result-files",  multiple = True, type=click.Path(exists=True))
 @click.argument("experiment-dir", type=click.Path(exists=True))
 def cli(
-        out_dir: str, 
+        out_file: str, 
         experiment_dir: str, 
+        result_files: Tuple,
         recompute_comparison_results: bool,
-        analyze_all_repeats: bool,
+        # analyze_all_repeats: bool,
 ):
-    logger.info(f'analysing phenotypes {PHENOTYPES}')
     if recompute_comparison_results:
         comparison_results = {
             pheno: read_comparison_results(
@@ -226,62 +246,69 @@ def cli(
         }
         with open("comparison_results.pkl", "wb") as f:
             pickle.dump(comparison_results, f)
-         df = pd.DataFrame([(key, value) for key, values in comparison_results.items() for value in values], columns=['phenotype', 'gene'])
+        df = pd.DataFrame([(key, value) for key, values in comparison_results.items() for value in values], columns=['phenotype', 'gene'])
         df['phenotype'] = [name.replace(' ', '_') for name in df['phenotype']]
         df.to_parquet('comparison_results.parquet') #deeprvat-analysis/data/comparison_results.parquet" used by monti/staar replication scripts
     else:
         with open("comparison_results.pkl", "rb") as f:
             comparison_results = pickle.load(f)
+    if len(result_files) == 0:
+        logger.info(f'Analysing result files for phenotypes {PHENOTYPES}')
+        results = pd.concat(
+            [
+                pd.read_parquet(
+                    Path(experiment_dir) / p / "deeprvat/eval/all_results.parquet",
+                    engine="pyarrow",
+                )
+                for p in PHENOTYPES
+            ]
+        )
+    else: 
+        logger.info(f'Analysing result files for result files {result_files}')
+        results = pd.concat(
+            [pd.read_parquet(f,engine="pyarrow",)
+                for f in tqdm(result_files)]
+        )
+    if  any('statin corrected' in value for value in results['phenotype'].unique()):
+        print('removing "statin corrected" suffix from phenotype names')
+        print(results['phenotype'].unique())
+        results['phenotype'] = [p.replace(' statin corrected', '') for p in results['phenotype']]
+        print(results['phenotype'].unique())
 
-    results = pd.concat(
-        [
-            pd.read_parquet(
-                Path(experiment_dir) / p / "deeprvat/eval/all_results.parquet",
-                engine="pyarrow",
-            )
-            for p in PHENOTYPES
-        ]
-    )
     phenotypes_to_remove = set(results['phenotype'].unique()) - set(comparison_results.keys())
     logger.info(f'excluding pheotypes {phenotypes_to_remove} because they are not in comparison studies')
     results = results[~results['phenotype'].isin(phenotypes_to_remove)]
 
     with open(Path(experiment_dir) / "config.yaml") as f:
         config = yaml.safe_load(f)
-    n_repeats = config["n_repeats"]
 
-    if analyze_all_repeats:
-        repeats_to_use = range(1, n_repeats + 1)
-    else:
-        repeats_to_use = [n_repeats]
 
-    all_repeats_list = []
-    for repeats in repeats_to_use:
-        logger.info(f"Analyzing replication with {repeats} DeepRVAT repeats")
-        rep_list = []
-        replication_data_all = prep_for_rep_plot(
-            results.query("repeats == @repeats"),
+    rep_list = []
+    logger.info(f"Result columns {results.columns}")
+    logger.info(f"computing replication across all phenotypes ({results['phenotype'].unique()})")
+    replication_data_all = prep_for_rep_plot(
+        results, #.query("repeats == @repeats"),
+        comparison_results,
+        n_genes=1000,
+    ).assign(pheno_grouping="all_phenotypes")
+    rep_list.append(replication_data_all)
+
+    logger.info(f"Computing replication for individual phenotypes")
+    for pheno in results["phenotype"].unique():
+        logger.info(pheno)
+
+        replication_data_pheno = prep_for_rep_plot(
+            results.query("phenotype == @pheno"),
             comparison_results,
             n_genes=1000,
-        ).assign(pheno_grouping="all_phenotypes")
-        rep_list.append(replication_data_all)
+        ).assign(pheno_grouping="single_pheno")
+        rep_list.append(replication_data_pheno)
 
-        for pheno in results["phenotype"].unique():
-            replication_data_pheno = prep_for_rep_plot(
-                results.query("phenotype == @pheno"),
-                comparison_results,
-                n_genes=1000,
-            ).assign(pheno_grouping="single_pheno")
-            rep_list.append(replication_data_pheno)
-
-        this_replication_data = pd.concat(rep_list).query("Method in @METHODS")
-        this_replication_data["repeats"] = repeats
-        all_repeats_list.append(this_replication_data)
+    this_replication_data = pd.concat(rep_list).query("Method in @METHODS")
 
     logger.info("Writing replication")
-    replication_data = pd.concat(all_repeats_list)
-    replication_data.to_parquet(Path(out_dir) / "replication.parquet", engine="pyarrow")
+    replication_data = pd.concat(rep_list)
 
-
+    replication_data.to_parquet(out_file, engine="pyarrow")
 if __name__ == "__main__":
     cli()

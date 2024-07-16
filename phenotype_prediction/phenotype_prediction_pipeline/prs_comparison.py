@@ -20,12 +20,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def get_matched_sample_indices(x, y):
+    """
+    # this function is supposed to do the same as
+    # indices= np.array([np.where(x==iy)[0][0] for iy in y]) but is much faster
+    #https://stackoverflow.com/questions/8251541/numpy-for-every-element-in-one-array-find-the-index-in-another-array
+
+    Args:
+        x : query array
+        y: query values. The function returns the index of each element of y in x
+    Returns:
+        np.array: Index of each element of y in x
+    """
+    assert np.in1d(y, x).sum() == len(y), "All values of y must be in x"
+
+    xsorted = np.argsort(x)
+    ypos = np.searchsorted(x[xsorted], y)
+    x_indices = xsorted[ypos]
+
+    x_mask = np.zeros(np.shape(x)).astype(bool)
+    x_mask[x_indices] = True
+
+    return x_indices, x_mask
 
 PHENOTYPE_MAPPING = {
     "Forced_expiratory_volume_in_1_second_FEV1": "FEV1",
     "Mean_platelet_thrombocyte_volume": "MPTVS",
     "Body_mass_index_BMI": "BMI",
     "IGF_1": "IGF-1",
+    "LDL_direct_statin_corrected": 'LDL direct',
+    'Cholesterol_statin_corrected': 'Cholesterol',
     "Red_blood_cell_erythrocyte_count": "Erythrocyte count",
 }
 
@@ -40,58 +64,27 @@ def load_prs(prs_id, prs_file):
 def compare_with_baseline_studies(
     phenotype,
     discoveries,
-    discoveries_all_samples=None,
 ):
-    phenotype = phenotype.replace("_standardized", "")
-
-    phenotype = (
-        PHENOTYPE_MAPPING[phenotype]
-        if phenotype in PHENOTYPE_MAPPING.keys()
-        else " ".join(phenotype.split("_"))
-    )
     logger.info(phenotype)
-    genes_deeprvat_new = set(
-        discoveries.query(
-            'Trait == @phenotype & Method == "DeepRVAT" & \
-    `Discovery type` == "New DeepRVAT discovery"'
-        )["gene"]
-    )
+
     genes_deeprvat_all = set(
-        discoveries.query('Trait == @phenotype & Method == "DeepRVAT"')["gene"]
+        discoveries.query('phenotype == @phenotype & Method == "DeepRVAT"')["gene"]
     )
     genes_baseline = set(
-        discoveries.query('Trait == @phenotype  & Method == "Burden/SKAT combined"')[
+        discoveries.query('phenotype == @phenotype  & Method == "Burden/SKAT combined"')[
             "gene"
         ]
     )
-    if len(genes_baseline) == 0:
-        top_n_genes = 1
-        top_n_genes = min(len(genes_deeprvat_all), top_n_genes)
-        logger.info(
-            f"Using top {top_n_genes} of DeepRVAT discoveries for baseline because there were no baseline discoveries"
-        )
-        genes_baseline = set(
-            discoveries.query('Trait == @phenotype & Method == "DeepRVAT"')
-            .sort_values("pval")["gene"]
-            .drop_duplicates()
-            .head(top_n_genes)
-        )
+
     gene_dict = {
         "deeprvat_discoveries": genes_deeprvat_all,
-        "deeprvat_novel": genes_deeprvat_new,
         "baseline_only": genes_baseline,
     }
     logger.info([f"{key} : {len(gene_dict[key])}" for key in gene_dict.keys()])
 
-    if discoveries_all_samples is not None:
-        genes_deeprvat_all_samples = set(
-            discoveries_all_samples.query(
-                'phenotype == @phenotype & Method == "DeepRVAT"'
-            )["gene"]
-        )
-        gene_dict["deeprvat_all_samples"] = genes_deeprvat_all_samples
+
     logger.info(
-        f"Number of baseline discoveries: {len(genes_baseline)} \n Number of DeepRVAT discoveries: {len(genes_deeprvat_all)} \n Number of Novel DeepRVAT discoveries: {len(genes_deeprvat_new)}"
+        f"Number of baseline discoveries: {len(genes_baseline)} \n Number of DeepRVAT discoveries: {len(genes_deeprvat_all)}"
     )
 
     return gene_dict
@@ -115,32 +108,27 @@ def get_vars_pers_sample_and_gene(gene, G_full, grouped_annotations):
 
 def _get_burden_correlation(data_dict):
     genes = [
-        i for i in data_dict["deeprvat"]["baseline_only"][0]["x"].keys() if "gene_" in i
+        i for i in data_dict["deeprvat"]["baseline_only"]["x"].keys() if "gene_" in i
     ]
     corr_dict = {}
-    for repeat in data_dict["deeprvat"]["baseline_only"].keys():
-        corr_dict[f"repeat_{repeat}"] = {}
-        for btype in data_dict["baseline"].keys():
-            logger.info(f"Computing correlation for btype {btype}")
-            corr_list = []
-            for gene in genes:
-                try:
-                    scores_b = data_dict["baseline"][btype]["baseline_only"]["x"][gene]
-                    scores_d = data_dict["deeprvat"]["baseline_only"][repeat]["x"][gene]
-                    corr_list.append(round(stats.pearsonr(scores_d, scores_b)[0], 3))
-                except:
-                    logger.info(
-                        f"Gene {gene} missing from deeprvat or baseline burden (likely {btype})"
-                    )
-            corr_dict[f"repeat_{repeat}"][btype] = corr_list
+    for btype in data_dict.keys():
+        logger.info(f"Computing correlation for btype {btype}")
+        corr_list = []
+        for gene in genes:
+            try:
+                scores_b = data_dict[btype]["baseline_only"]["x"][gene]
+                scores_d = data_dict["deeprvat"]["baseline_only"]["x"][gene]
+                corr_list.append(round(stats.pearsonr(scores_d, scores_b)[0], 3))
+            except:
+                logger.info(
+                    f"Gene {gene} missing from deeprvat or baseline burden (likely {btype})"
+                )
+        corr_dict[btype] = corr_list
     avg_corr = {
-        repeat: {
             btype: np.round(np.mean([np.abs(i) for i in corr_list]), 3)
-            for btype, corr_list in subitem.items()
-        }
-        for repeat, subitem in corr_dict.items()
+            for btype, corr_list in corr_dict.items()
     }
-    logger.info(f"Average correlation plof-deeprvat across all repeats: {avg_corr}")
+    logger.info(f"Average correlation baseline-deeprvat across all repeats: {avg_corr}")
 
 
 def export_all_data(
@@ -149,55 +137,30 @@ def export_all_data(
     phenotype_df,
     genes_this_pheno,
     ordered_samples_to_keep,
-    sample_mask,
     covariate_cols,
     phenotype_cols,
-    baseline_sample_mask=None,
 ):
-    data_dict = {"baseline": {}, "deeprvat": {}}
 
-    # gene_lists = ['baseline_only', 'deeprvat_discoveries', 'genebass']
     gene_lists = ["baseline_only", "deeprvat_discoveries"]
 
-    # 'deeprvat_all_samples']
-    baseline_btypes = list(burdens_dict.keys())
-    baseline_btypes.remove("deeprvat")
-    data_dict["baseline"] = {
-        btype: {gene_list: {} for gene_list in gene_lists} for btype in baseline_btypes
+    data_dict = {
+        btype: {gene_list: {} for gene_list in gene_lists} for btype in burdens_dict.keys()
     }
-
-    for btype in baseline_btypes:
+    for btype in burdens_dict.keys():
         for gene_list in gene_lists:
-            gene_list_suffix = "" if gene_list == "baseline_only" else "_deeprvat_genes"
 
             this_data_dict = get_model_data(
                 burdens=burdens_dict[btype],
                 btype=btype,
                 genes_this_pheno=genes_this_pheno,
                 gene_list=gene_list,
-                sample_mask=sample_mask,
                 ordered_sample_ids=ordered_samples_to_keep,
                 prs_df=prs_df,
                 phenotype_df=phenotype_df,
                 phenotype_cols=phenotype_cols,
+                covariate_cols=covariate_cols
             )
-            data_dict["baseline"][btype][gene_list] = this_data_dict
-
-    for gene_list in gene_lists:
-        this_data_dict = get_model_data(
-            burdens=burdens_dict["deeprvat"],
-            btype="deeprvat",
-            genes_this_pheno=genes_this_pheno,
-            gene_list=gene_list,
-            sample_mask=sample_mask,
-            ordered_sample_ids=ordered_samples_to_keep,
-            prs_df=prs_df,
-            phenotype_df=phenotype_df,
-            phenotype_cols=phenotype_cols,
-        )
-
-        data_dict["deeprvat"][gene_list] = this_data_dict
-
+            data_dict[btype][gene_list] = this_data_dict       
     ########################################################
     # sanity chek: correlation of plof scores with deeprvat
     logger.info("Computing correlation of different burden types for significant genes")
@@ -211,56 +174,48 @@ def get_model_data(
     btype,
     genes_this_pheno,
     gene_list,
-    sample_mask,
     ordered_sample_ids,
     prs_df,
     phenotype_df,
     phenotype_cols,
+    covariate_cols
 ):
     logger.info(f"Retreiveing model data for btype {btype}")
     query_genes = [
         gene for gene in genes_this_pheno[gene_list] if gene in list(burdens.keys())
     ]
     logger.info(
-        f"Number of missing query genes: {len(query_genes) - len(genes_this_pheno[gene_list])}"
+        f"Number of missing query genes: {len(genes_this_pheno[gene_list])- len(query_genes)}"
     )
     logger.info(
         f"Missing  genes: {set(genes_this_pheno[gene_list]) - set(burdens.keys())}"
     )
 
-    if btype == "deeprvat":
-        repeats = burdens[list(burdens.keys())[0]].keys()
-        this_data_dict = {repeat: {} for repeat in repeats}
-        # average predictions over all repeats
-        for repeat in repeats:
-            this_deeprvat_burdens = [burdens[gene][repeat] for gene in query_genes]
-            this_deeprvat_burdens = np.column_stack(this_deeprvat_burdens)[sample_mask]
+    this_burdens = [burdens[gene] for gene in query_genes]
+    burden_sample_map, _ = get_matched_sample_indices(burdens['sample_ids'], ordered_sample_ids)
+    # mapping sanity check, can be removed in future 
+    for i in np.random.randint(len(ordered_sample_ids), size=10):
 
-            logger.info(f"deeprvat burden shape {this_deeprvat_burdens.shape}")
+        assert burdens['sample_ids'][burden_sample_map[i]] == ordered_sample_ids[i]
+    test = np.column_stack(this_burdens)  # sanity check, can be removed in future 
+    this_burdens = np.column_stack(this_burdens)[burden_sample_map]
+    # sanity check, can be removed in future 
 
-            y, x = _get_model_data(
-                gene_burdens=this_deeprvat_burdens,
-                ordered_sample_ids=ordered_sample_ids,
-                this_prs=prs_df,
-                phenotype_df=phenotype_df,
-                gene_ids=query_genes,
-                phenotype_cols=phenotype_cols,
-            )
+    for  i in np.random.choice(np.where(this_burdens.sum(axis =1) > 0)[0], 10):
+        assert np.all(test[burden_sample_map[i], :] == this_burdens[i, :])
 
-            this_data_dict[repeat] = {"y": y, "x": x}
-    else:
-        this_baseline_burdens = [burdens[gene] for gene in query_genes]
-        this_baseline_burdens = np.column_stack(this_baseline_burdens)[sample_mask]
-        logger.info(f"Baseline burdens shape: {this_baseline_burdens.shape}")
-        y, x = _get_model_data(
-            gene_burdens=this_baseline_burdens,
-            ordered_sample_ids=ordered_sample_ids,
-            this_prs=prs_df,
-            phenotype_df=phenotype_df,
-            gene_ids=query_genes,
-            phenotype_cols=phenotype_cols,
-        )
-        this_data_dict = {"y": y, "x": x}
+    logger.info(f"Baseline burdens shape: {this_burdens.shape}")
+    y, x = _get_model_data(
+        gene_burdens=this_burdens,
+        ordered_sample_ids=ordered_sample_ids,
+        this_prs=prs_df,
+        phenotype_df=phenotype_df,
+        gene_ids=query_genes,
+        phenotype_cols=phenotype_cols,
+        covariate_cols=covariate_cols,
+
+    )
+    this_data_dict = {"y": y, "x": x}
 
     return this_data_dict
 
@@ -274,6 +229,7 @@ def _get_model_data(
     covariate_cols=["age", "genetic_sex", *[f"genetic_PC_{i}" for i in range(1, 21)]],
     gene_ids=None,
 ):
+
     if gene_burdens is not None:
         X = np.column_stack(
             [
@@ -299,7 +255,6 @@ def _get_model_data(
             ]
         )
         colnames = ["prs", *covariate_cols]
-    # import ipdb; ipdb.set_trace()
     X = pd.DataFrame(X, columns=colnames, index=ordered_sample_ids)
     Y = phenotype_df.loc[ordered_sample_ids][phenotype_cols]
 

@@ -2,10 +2,10 @@ phenotypes:
   - Apolipoprotein_A
   - Apolipoprotein_B
   - Calcium
-  - Cholesterol
+  - Cholesterol_statin_corrected
   - HDL_cholesterol
   - IGF_1
-  - LDL_direct
+  - LDL_direct_statin_corrected
   - SHBG
   - Total_bilirubin
   - Triglycerides
@@ -33,11 +33,10 @@ phenotypes:
   - Forced_expiratory_volume_in_1_second_FEV1
   - Glycated_haemoglobin_HbA1c
   
-cv_splits: 5
 ######################### significant genes ############
 
 
-gene_file: genes.parquet
+gene_file: protein_coding_genes.parquet
 
 
 
@@ -45,15 +44,12 @@ gene_file: genes.parquet
 prs_pheno_map: prs_pheno_map.csv
 prs_file: PRS.parquet #should have sample ID as index and PGS{ID} as column names
 phenotype_file: phenotypes.parquet
-
-data_prep_fdrs:
-    - 0.05
+n_deeprvat_repeats: 6
+deeprvat_run_dir: deeprvat_train_dir
 
 
 
 regression:
-    fdrs:
-        - 0.05
     top_quantiles:
         - 0.001
         - 0.01
@@ -61,15 +57,42 @@ regression:
     pheno_suffixes:
         - qt
     r_config:
-        vtypes:
+        btypes:
+            - deeprvat
             - plof
             - cadd
             - polyphen
             - sift
             - primateai
             - splicai
-        n_deeprvat_repeats: 6
-        n_cv_splits: 5
+            - absplice
+            - alphamissense
         gene_lists: 
             - deeprvat_discoveries
             - baseline_only
+
+covariates:
+    - age
+    - age2
+    - age_sex
+    - genetic_sex
+    - genetic_PC_1
+    - genetic_PC_2
+    - genetic_PC_3
+    - genetic_PC_4
+    - genetic_PC_5
+    - genetic_PC_6
+    - genetic_PC_7
+    - genetic_PC_8
+    - genetic_PC_9
+    - genetic_PC_10
+    - genetic_PC_11
+    - genetic_PC_12
+    - genetic_PC_13
+    - genetic_PC_14
+    - genetic_PC_15
+    - genetic_PC_16
+    - genetic_PC_17
+    - genetic_PC_18
+    - genetic_PC_19
+    - genetic_PC_20

@@ -2,10 +2,12 @@ Apolipoprotein A,PGS001888
 Apolipoprotein B,PGS001889
 Calcium,PGS001893
 Cholesterol,PGS001895
+Cholesterol statin corrected,PGS001895
 Erythrocyte count,PGS001909
 HDL cholesterol,PGS001954
 IGF-1,PGS001960
 LDL direct,PGS001933
+LDL direct statin corrected,PGS001933
 Lymphocyte percentage,PGS001986
 Mean corpuscular volume,PGS001990
 Mean reticulocyte volume,PGS002003
@@ -31,4 +33,5 @@ Creatinine,PGS001945
 Whole body fat free mass,PGS001950
 Forced expiratory volume in 1 second FEV1,PGS001918
 FEV1,PGS001918
+QTC interval,PGS001906
 Glycated haemoglobin HbA1c,PGS001953

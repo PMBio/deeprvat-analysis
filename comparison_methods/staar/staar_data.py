@@ -306,7 +306,7 @@ def build_data(
         "annotations"
     ]
     annotation_df = dataset.annotation_df.query("id in @all_variants")
-    annotation_df = annotation_df[["gene_ids"] + annotation_cols]
+    annotation_df = annotation_df[["gene_id"] + annotation_cols]
     # exploded_annotations = (
     #     dataset.annotation_df.query("id in @all_variants")
     #     .explode("gene_ids")
@@ -314,14 +314,14 @@ def build_data(
     # )  # row can be duplicated if a variant is assigned to a gene multiple times
     exploded_annotations = (
         dataset.annotation_df.query("id in @all_variants")
-        .explode('gene_ids').reset_index()
+        .explode('gene_id').reset_index()
         .drop_duplicates()
         .set_index('id')
     )  
-    grouped_annotations = exploded_annotations.groupby("gene_ids")
+    grouped_annotations = exploded_annotations.groupby("gene_id")
     gene_ids = pd.read_parquet(dataset.gene_file, columns=["id"])["id"].to_list()
     gene_ids = list(
-        set(gene_ids).intersection(set(exploded_annotations["gene_ids"].unique()))
+        set(gene_ids).intersection(set(exploded_annotations["gene_id"].unique()))
     )
     logger.info(f"Number of genes to test: {len(gene_ids)}")
 

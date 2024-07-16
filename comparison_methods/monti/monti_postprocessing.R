@@ -18,6 +18,7 @@ input_files = snakemake@input[["testing_associations"]]
 out_path = snakemake@output[["out_path"]]
 
 source(file.path(code_dir, "monti_utils.R"))
+source(file.path(code_dir, "../utils.R"))
 
 
 print(gene_file)
@@ -62,7 +63,7 @@ for (pval_name in names(pval_cols)) {
     this_test_results = test_results %>%
         mutate(`:=`(pval, !!as.name(pval_col)))
     this_test_results[[pval_col]][this_test_results[[pval_col]] >= 1] = 0.99
-    this_test_results[['pval']][this_test_results[['pval']] >= 1] = 0.99
+    this_test_results[["pval"]][this_test_results[["pval"]] >= 1] = 0.99
 
     cct_combined_pvals = cct_combine_pvals(test_results = this_test_results, cct_vtypes = cct_vtypes)
 

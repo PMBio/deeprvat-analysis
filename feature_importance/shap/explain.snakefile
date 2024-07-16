@@ -2,11 +2,11 @@ from pathlib import Path
 from typing import List
 
 
-py="python [path_to_deeprvat]/deeprvat/deeprvat/"
+py="python [path_to_deeprvat_analysis]/feature_importance/shap/"
 
 path_to_inputs="[path_to_example_input_dir]"
 pretrained_dir="[path_to_deeprvat]/pretrained_models"
-config_file="[path_to_deeprvat-analysis]/association_testing/paper_experiment/config.yaml"
+config_file="[path_to_deeprvat_analysis]/feature_importance/config.yaml"
 
 
 
