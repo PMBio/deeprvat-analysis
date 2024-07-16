@@ -18,17 +18,21 @@ logger = logging.getLogger(__name__)
 @click.command()
 @click.option("--exp_dir", type=click.Path(exists=True), default=".")
 @click.option("--folds", type=int, default= 0)
-@click.option("--downsample_percent", type=float, default= 0.1, help="Percentage of phenotypes to remove each fold")
+@click.option("--downsample_percent", type=float, default= 0.1, help="Percentage of phenotypes to remove in each fold")
 def phenotype_selection(
     exp_dir: str,
     folds: int,
     downsample_percent: float, 
 ):
+    '''
+    This script is used for running the phenotype-downsample analysis. 
+    Works with the cv_split model setup.
+    '''
     logger.info(f"Downsampling Phenotype Selection Across Folds")
     logger.info(f"   Downsampling WITHOUT Replacement")
     rng = np.random.default_rng(seed=42)
 
-    with open(f'{exp_dir}/base/config.yaml') as f:
+    with open(f'{exp_dir}/base/deeprvat_config.yaml') as f:
         config = yaml.safe_load(f)
     
     phenotypes = config["training"]["phenotypes"]
@@ -71,7 +75,7 @@ def phenotype_selection(
     for fold in range(folds):
         fold_select = groups
         
-        with open(f'{exp_dir}/base/config.yaml','r') as f:
+        with open(f'{exp_dir}/base/deeprvat_config.yaml','r') as f:
             foldconfig = yaml.safe_load(f)
 
         for i in range(num_phenos_to_remove):
@@ -84,7 +88,7 @@ def phenotype_selection(
             fold_select[f'group_{i}'].pop(0)
             rng.shuffle(fold_select[f'group_{i}'])
 
-        with open(f'{exp_dir}/set_{fold}/config.yaml', "w") as f:
+        with open(f'{exp_dir}/set_{fold}/deeprvat_config.yaml', "w") as f:
             yaml.dump(foldconfig, f) #save new set of training_phenotypes
 
         logger.info(f"   Fold {fold} complete:")

@@ -16,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 @click.command()
-@click.option("--base_dir", type=click.Path(exists=True), default="./base")
+@click.option("--exp_dir", type=click.Path(exists=True), default=".")
 @click.option("--seed_gene_file", type=str, default="seed_genes.parquet")
 @click.option("--folds", type=int, default= 0, help="The number of different seed-gene setups, i.e. number of experiments each with a different set of seed genes.")
 @click.option("--downsample_percent", type=float, default= 0.1, help="Percentage of total seed genes to remove.")
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 @click.option("--min_seed_genes", type=int, default= 4)
 @click.option("--cv_splits", type=int, default= 5)
 def seed_gene_selection(
-    base_dir: str,
+    exp_dir: str,
     seed_gene_file: Optional[str],
     folds: int,
     downsample_percent: float, 
@@ -33,7 +33,8 @@ def seed_gene_selection(
     cv_splits: 5,
 ):
     '''
-    This script is used for running the seed_gene_sensitivity analysis. Works with the cv_split model setup.
+    This script is used for running the seed-gene-downsample analysis. 
+    Works with the cv_split model setup.
     '''
     logger.info(f"Downsampling Seed Gene Selection")
     rng = np.random.default_rng(seed=42)
@@ -44,7 +45,7 @@ def seed_gene_selection(
     total_seed_genes = 0
     resample_phenos = []
 
-    with open(f'./{base_dir}/config.yaml') as f:
+    with open(f'{exp_dir}/base/deeprvat_config.yaml') as f:
         config = yaml.safe_load(f)
     
     phenotypes = config["training"]["phenotypes"]
@@ -53,7 +54,7 @@ def seed_gene_selection(
     logger.info(f"  Phenotypes reserved for association testing: {association_only_phenos}")
     
     for pheno in phenotypes:
-        seed_gene_df = pd.read_parquet(f'./{base_dir}/cv_split0/deeprvat/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow") ##all cv_splits have the same seed_gene.parquet for a given phenotype
+        seed_gene_df = pd.read_parquet(f'{exp_dir}/base/cv_split0/deeprvat/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow") ##all cv_splits have the same seed_gene.parquet for a given phenotype
         sg_dict[pheno] = len(seed_gene_df)
         if sg_dict[pheno] <= min_seed_genes:
             logger.info(f"  Too few seed genes. Keeping all seed genes for {pheno}. Number of seed genes = {sg_dict[pheno]}")
@@ -115,12 +116,12 @@ def seed_gene_selection(
     for fold in range(folds):
         for split in range(cv_splits):
             for pheno in phenotypes:
-                seed_gene_df = pd.read_parquet(f'./{base_dir}/cv_split{split}/deeprvat/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow")
+                seed_gene_df = pd.read_parquet(f'{exp_dir}/base/cv_split{split}/deeprvat/{pheno}/deeprvat/{seed_gene_file}', engine="pyarrow")
 
-                with open(f'./{base_dir}/cv_split{split}/deeprvat/{pheno}/deeprvat/hpopt_config.yaml') as f:
+                with open(f'{exp_dir}/base/cv_split{split}/deeprvat/{pheno}/deeprvat/config.yaml') as f:
                     baseconfig = yaml.safe_load(f)
 
-                p = Path(f'./sg_set_{fold}/cv_split{split}/deeprvat/{pheno}/deeprvat')
+                p = Path(f'{exp_dir}/sg_set_{fold}/cv_split{split}/deeprvat/{pheno}/deeprvat')
                 p.mkdir(parents=True,exist_ok=True)
 
                 if (pheno not in resample_phenos) or (sg_remove_dict[pheno][fold] == 0):
@@ -136,19 +137,19 @@ def seed_gene_selection(
                     logger.info(f"     sg_set{fold} cv_split{split} - {pheno}: Saved seed_genes.parquet")
                     del seed_gene_new_df
                 
-                with open(f'./sg_set_{fold}/cv_split{split}/deeprvat/{pheno}/deeprvat/hpopt_config.yaml', "w") as f:
+                with open(f'{exp_dir}/sg_set_{fold}/cv_split{split}/deeprvat/{pheno}/deeprvat/config.yaml', "w") as f:
                     yaml.dump(baseconfig, f)
                     
                 del seed_gene_df
 
             if association_only_phenos:
                 for association_pheno in association_only_phenos:
-                    with open(f'./{base_dir}/cv_split{split}/deeprvat/{association_pheno}/deeprvat/hpopt_config.yaml') as f:
+                    with open(f'{exp_dir}/base/cv_split{split}/deeprvat/{association_pheno}/deeprvat/config.yaml') as f:
                         baseconfig = yaml.safe_load(f)
 
-                    p = Path(f'./sg_set_{fold}/cv_split{split}/deeprvat/{association_pheno}/deeprvat')
+                    p = Path(f'{exp_dir}/sg_set_{fold}/cv_split{split}/deeprvat/{association_pheno}/deeprvat')
                     p.mkdir(parents=True,exist_ok=True)
-                    with open(f'./sg_set_{fold}/cv_split{split}/deeprvat/{association_pheno}/deeprvat/hpopt_config.yaml', "w") as f:
+                    with open(f'{exp_dir}/sg_set_{fold}/cv_split{split}/deeprvat/{association_pheno}/deeprvat/config.yaml', "w") as f:
                         yaml.dump(baseconfig, f)
 
 

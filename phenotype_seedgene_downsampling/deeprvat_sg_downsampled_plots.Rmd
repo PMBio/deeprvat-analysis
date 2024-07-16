@@ -1,5 +1,5 @@
 ---
-title: "DeepRVAT - Seed Genes Downsampled figures"
+title: "DeepRVAT - Seed Genes / Phenotypes Downsampled figures"
 output:
   pdf_document: default
   html_notebook: default
@@ -47,8 +47,8 @@ phenotypes <- c(
 Load DeepRVAT results
 
 ```{r}
-standard_deeprvat_exp_name = 'deeprvat_cv_bf_seed_genes'
-results_dir_standard_deeprvat <- file.path("/path", standard_deeprvat_exp_name)
+standard_deeprvat_exp_name = 'baseline_deeprvat'
+results_dir_standard_deeprvat <- file.path("~/path/to/exp", standard_deeprvat_exp_name)
 
 results_list <- list()
 sig_list <- list()
@@ -68,14 +68,14 @@ sig_results
 ``` 
 
 ```{r}
-downsampledsg_experiment_dir = file.path("/path", "deeprvat_cv_seed_gene_sensitivity")
+downsampledsg_experiment_dir = file.path("/path/to/exp", "deeprvat_cv_phenotype_sensitivity" ) #deeprvat_cv_seed_gene_sensitivity")
 num_exps <- 5
 downsampledsg_list <- list()
 sig_sg_list <- list()
 sig_sg_all <- list()
 downsampledsg_df <- data.frame()
 for (i in 0:(num_exps-1)) {
-    sg_set <- paste("sg_set_", i, sep="")
+    sg_set <- paste("set_", i, sep="") #paste("sg_set_", i, sep="")
     for (p in phenotypes) {
         downsampledsg_list[[p]] <- read_parquet(file.path(downsampledsg_experiment_dir, sg_set, p, "deeprvat", "eval", "all_results.parquet"))
         sig_sg_list[[p]] <- read_parquet(file.path(downsampledsg_experiment_dir, sg_set, p, "deeprvat", "eval", "significant.parquet"))
@@ -145,8 +145,6 @@ colnames(df) <- c("Value")
 
 ggplot(df, aes(x = rownames(df), y = Value, fill= Value)) +
   geom_bar(stat = "identity", fill="darkblue") +
-  #scale_fill_gradient(low = "lightblue", high = "darkblue") +
-  #scale_fill_viridis_c() +
   geom_text(aes(label = round(Value, 3)), vjust = -0.5) +
   labs(#title = "Jaccard Index of significant gene-trait associations between\ndownsampled seed gene experiments and standard DeepRVAT",
        x = "Experiment", y = "Jaccard Index") +
