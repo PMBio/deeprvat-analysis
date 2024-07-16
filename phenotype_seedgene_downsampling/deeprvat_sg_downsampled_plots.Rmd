@@ -1,0 +1,156 @@
+---
+title: "DeepRVAT - Seed Genes / Phenotypes Downsampled figures"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+Load libraries
+
+```{r}
+library(ggplot2)
+library(arrow)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(latex2exp) 
+```
+
+Metadata
+
+```{r}
+phenotypes <- c(
+  "Apolipoprotein_A",
+  "Apolipoprotein_B",
+  "Calcium",
+  "Cholesterol_statin_corrected",   #Cholesterol
+  "HDL_cholesterol",
+  "IGF_1",
+  "LDL_direct_statin_corrected",  #LDL_direct
+  "Lymphocyte_percentage",
+  "Mean_corpuscular_volume",
+  "Mean_platelet_thrombocyte_volume",
+  "Mean_reticulocyte_volume",
+  "Neutrophill_count",
+  "Platelet_count",
+  "Platelet_crit",
+  "Platelet_distribution_width",
+  "Red_blood_cell_erythrocyte_count",
+  "SHBG",
+  "Standing_height",
+  "Total_bilirubin",
+  "Triglycerides",
+  "Urate"
+  )
+```
+
+Load DeepRVAT results
+
+```{r}
+standard_deeprvat_exp_name = 'baseline_deeprvat'
+results_dir_standard_deeprvat <- file.path("~/path/to/exp", standard_deeprvat_exp_name)
+
+results_list <- list()
+sig_list <- list()
+for (p in phenotypes) {
+  results_list[[p]] <- read_parquet(file.path(results_dir_standard_deeprvat, p, "deeprvat", "eval", "all_results.parquet"))
+  sig_list[[p]] <- read_parquet(file.path(results_dir_standard_deeprvat, p, "deeprvat", "eval", "significant.parquet"))
+}
+
+ref_results <- bind_rows(results_list) %>%
+    filter(Method == 'DeepRVAT')
+    ##mutate(phenotype = str_replace_all(phenotype, c("Cholesterol statin corrected" = "Cholesterol", "LDL direct statin corrected"="LDL")))
+ref_results
+
+sig_results <- bind_rows(sig_list) %>%
+    filter(Method == 'DeepRVAT')
+sig_results
+``` 
+
+```{r}
+downsampledsg_experiment_dir = file.path("/path/to/exp", "deeprvat_cv_phenotype_sensitivity" ) #deeprvat_cv_seed_gene_sensitivity")
+num_exps <- 5
+downsampledsg_list <- list()
+sig_sg_list <- list()
+sig_sg_all <- list()
+downsampledsg_df <- data.frame()
+for (i in 0:(num_exps-1)) {
+    sg_set <- paste("set_", i, sep="") #paste("sg_set_", i, sep="")
+    for (p in phenotypes) {
+        downsampledsg_list[[p]] <- read_parquet(file.path(downsampledsg_experiment_dir, sg_set, p, "deeprvat", "eval", "all_results.parquet"))
+        sig_sg_list[[p]] <- read_parquet(file.path(downsampledsg_experiment_dir, sg_set, p, "deeprvat", "eval", "significant.parquet"))
+    }
+    temp_df <- bind_rows(downsampledsg_list) %>% filter(Method == 'DeepRVAT')
+    sig_sg_all[[i+1]] <- bind_rows(sig_sg_list) %>% filter(Method == 'DeepRVAT')
+    
+    downsampledsg_df <- bind_rows(downsampledsg_df,temp_df)
+}
+
+sig_sg_all
+```
+
+```{r}
+plot_df_ref_vs_downsampledsg <- ref_results %>% left_join(downsampledsg_df, by = c('phenotype', 'gene'), suffix = c('_downsample', '_reference'))
+# phenotype, gene, pval_downsample, pval_reference 
+
+corr_coef <- cor(plot_df_ref_vs_downsampledsg$pval_reference,plot_df_ref_vs_downsampledsg$pval_downsample)
+```
+
+```{r}
+x_y_labs =  labs(x = TeX("$Reference -log_{10}(P)$"), y = TeX("$Downsampled Seed Genes -log_{10}(P)$"))
+
+plot <- ggplot(plot_df_ref_vs_downsampledsg %>% filter(pval_reference > 1e-8),
+  aes(x = -log10(pval_reference), y = -log10(pval_downsample))) +
+  geom_abline(slope=1, intercept = 0, color='darkgray') +
+  geom_bin2d(bins = 1000, binwidth = c(0.05, 0.05)) +
+  theme(aspect.ratio = 1) +
+  scale_fill_continuous(trans = "log10", type = "viridis") +
+  theme_classic()
+  
+plot <- plot + annotate(geom='text', x=2.5, y=8, label = paste("correlation coefficient =",round(corr_coef,2)), size = 4, color = "black")
+
+plot
+```
+
+Jaccard index
+```{r}
+compute_jaccard_index <- function(column1, column2) {
+  # Convert each column to sets (unique elements)
+  set1 <- unique(column1)
+  set2 <- unique(column2)
+  
+  # Calculate intersection and union sizes
+  intersection_size <- nrow(intersect(set1, set2))
+  union_size <- nrow(union(set1, set2))
+  
+  # Compute Jaccard index
+  jaccard_index <- intersection_size / union_size
+  
+  return(jaccard_index)
+}
+```
+
+```{r}
+jaccard_index <- list()
+for (i in 1:num_exps) {
+  jaccard_index[i] <- compute_jaccard_index(sig_results %>% select(gene,phenotype) , sig_sg_all[[i]] %>% select(gene,phenotype) )
+}
+jaccard_index
+```
+
+
+```{r}
+df <- as.data.frame(do.call(rbind, jaccard_index))
+colnames(df) <- c("Value")
+
+ggplot(df, aes(x = rownames(df), y = Value, fill= Value)) +
+  geom_bar(stat = "identity", fill="darkblue") +
+  geom_text(aes(label = round(Value, 3)), vjust = -0.5) +
+  labs(#title = "Jaccard Index of significant gene-trait associations between\ndownsampled seed gene experiments and standard DeepRVAT",
+       x = "Experiment", y = "Jaccard Index") +
+  theme_classic() +
+  coord_cartesian(ylim = c(0, max(df$Value) * 1.05)) +  # Set y-axis limits
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) +
+  theme(aspect.ratio=1)
+
+```

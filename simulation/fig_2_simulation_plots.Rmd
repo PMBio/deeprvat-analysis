@@ -471,9 +471,7 @@ lambda_df_plot = bind_rows(lambda_causal_non_causal %>% select(all_of(colnames(l
   summarize(lambda_str  = paste(lambda_str, collapse = '\n'))
 
 lambda_df
-
 ```
-
 
 
 ```{r}
@@ -571,7 +569,6 @@ for (this_method in levels(all_pvals$method)){
 qq_arange_causal_split = ggarrange(plotlist = p_list_causal_split, ncol = 2, nrow = 3) +
   theme(plot.margin = margin(1,1,0,1, "cm")) 
 # qq_arange_causal_split
-qq_arange_causal_split
 ```
 
 
@@ -677,7 +674,38 @@ ggsave(file.path(plot_out_path, 'supp_fig_1_5.pdf'), p,
 ```
 
 
+
+
+## supp figure
+
 ```{r}
+box_plot_lambda = ggplot(lambda_df, aes(x = method, y = lambda, fill = method)) +
+  geom_boxplot() +
+  scale_fill_manual(values=colors_methods, guide = 'none') +
+  # labs(title='QQ plot (uncorrected p-values)') +
+  labs(x = '', y = TeX('Genomic inflation factor ($\\lambda$)')) +
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle = 45,  hjust =1)) 
+  # geom_text(data= lambda_vals, mapping = aes(x = 1, y = 7, label= lambda), size = 12)
+box_plot_lambda
+```
+
+
+```{r}
+
+# p = ggarrange(p_fdr_default_p_causal, box_plot_lambda, p_prop, p_replication, 
+#           nrow = 2, ncol =2 , labels = 'auto')
+
+
+lay = rbind(c(NA,NA,NA, NA, NA,NA),
+            c(1,1,1, NA, 2,2),
+            c(3,3,4, NA, 5, 5))
+deeprvat_legend = g_legend(deeprvat_legend_vert)
+
+p = grid.arrange(p_fdr_default_p_causal, box_plot_lambda, p_prop, deeprvat_legend, p_replication,
+          nrow = 3, ncol = 6,
+          layout_matrix = lay, heights = c(0.1, 1.5,1),
+          widths = c(1,1,1,0.2, 1,1))
 
 plot_width = 20
 
@@ -704,6 +732,19 @@ ggsave(file.path(plot_out_path, 'supp_fig_1_4.png') , p,
        width = 25, height = 20, unit = 'cm',
        dpi = 600)
 ggsave(file.path(plot_out_path, 'supp_fig_1_4.pdf') , p,
+       width = 25, height = 20, unit = 'cm',
+       dpi = 600)
+
+```
+
+```{r}
+p_qq = ggarrange(plotlist = p_list_causal_split, ncol = 2, nrow = 3, common.legend = TRUE) 
+
+p = ggarrange(ggarrange(NA, NA, labels = c('a', 'b') ,font.label = list(size = plot_width/default_plot_width * label_default_size, ncol =2) , widths = c(1.5, 1)),
+          ggarrange( p_qq, box_plot_lambda + theme(plot.margin = margin(0, 0, 0, 1, unit = 'cm')), widths = c(1.5, 1)),
+          nrow =2, heights = c(0.1, 0.9))
+
+ggsave(file.path(plot_out_path, 'fig_2_supp_calibration.png') , p, 
        width = 25, height = 20, unit = 'cm',
        dpi = 600)
 

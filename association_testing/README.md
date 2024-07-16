@@ -36,5 +36,3 @@ For running the default REGENIE RVAT test (burden/SKAT) see the [REGENIE documen
 ## Get the paper figures
 
 Use the makrdowns in this directory to generate all figures. For this, the experiments in `../comparison_methods/{monti/staar}/experiments` also have to be run. 
-
-
