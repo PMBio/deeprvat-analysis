@@ -245,6 +245,6 @@ makeReplicationPlot = function(replication, max_rank, title = ''){
     group_by(Method) %>% 
     summarize(`Gene rank` = max(`Gene rank`), `Replicated genes` = max(`Replicated genes`))
   max_significant
-  replication_plot <- replication_plot + geom_point(data=max_significant, aes(x=`Gene rank`, y=`Replicated genes`, color=Method), size = 2)
+  replication_plot <- replication_plot + geom_point(data=max_significant, aes(x=`Gene rank`, y=`Replicated genes`, color=Method), size = 1)
   return(replication_plot)
 }
