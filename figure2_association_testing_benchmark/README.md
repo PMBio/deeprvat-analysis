@@ -17,7 +17,7 @@ Each directory has to contain input data returned by the preprocessing and annot
 Then run the [DeepRVAT CV training/association testing pipeline](https://github.com/PMBio/deeprvat/blob/main/pipelines/cv_training/cv_training_association_testing.snakefile) from all `deeprvat_` directories. 
 One exception is the `deeprvat_synonymous` directory, where a symlink to the [pretrained_models](https://github.com/PMBio/deeprvat/tree/main/pretrained_models) from the DeepRVAT repository has to be created and association testing is subsequently run with the [pre-trained model association testing pipeline](https://github.com/PMBio/deeprvat/blob/main/pipelines/association_testing_pretrained.snakefile).
 
-To run the [phenotype and seed gene downsampling](phenotype_seedgene_downsampling) as well the experiments for assessing the  [robustness of the DeepRVAT to inclusion of null seed genes during training](add_random_seedgenes) run the shell scripts in the respective folders. 
+To run the [phenotype and seed gene downsampling](./phenotype_seedgene_downsampling) as well as the experiments for assessing the [robustness of DeepRVAT to inclusion of null seed genes during training](./add_random_seedgenes), run the shell scripts in the respective `phenotype_seedgene_downsampling` or `add_random_seedgenes` directory.
 
 For the conditional analysis, run the [conditional analysis pipeline](https://github.com/PMBio/deeprvat/blob/main/pipelines/association_testing_control_for_common_variants.snakefile) from `deeprvat_main_exp` after the training/association testing has finished. 
 

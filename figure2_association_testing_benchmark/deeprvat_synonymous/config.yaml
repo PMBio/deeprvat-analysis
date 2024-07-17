@@ -60,7 +60,7 @@ cv_path: sample_files
 n_folds: 5
 alpha: 0.05
 
-model_dir: ./pretreained_models
+model_dir: ./pretrained_models
 n_burden_chunks: 5
 n_regression_chunks: 2
 
