@@ -1,0 +1,64 @@
+alt_burdens_data:
+    gt_file: genotypes.h5
+    variant_file: variants.parquet
+    dataset_config:
+        y_transformation: quantile_transform
+        min_common_af:
+            UKB_AF: 0.001 
+        phenotype_file: phenotypes.parquet
+        x_phenotypes:
+            - age
+            - genetic_sex
+            - genetic_PC_1
+            - genetic_PC_2
+            - genetic_PC_3
+            - genetic_PC_4
+            - genetic_PC_5
+            - genetic_PC_6
+            - genetic_PC_7
+            - genetic_PC_8
+            - genetic_PC_9
+            - genetic_PC_10
+            - genetic_PC_11
+            - genetic_PC_12
+            - genetic_PC_13
+            - genetic_PC_14
+            - genetic_PC_15
+            - genetic_PC_16
+            - genetic_PC_17
+            - genetic_PC_18
+            - genetic_PC_19
+            - genetic_PC_20
+        annotation_file: annotations.parquet #is equal to current_annotations.parquet
+        annotations:
+            - UKB_AF
+            - CADD_raw
+            - PrimateAI_score
+            - sift_score
+            - polyphen_score
+            - SpliceAI_delta_score
+            - Consequence_missense_variant
+            - AbSplice_DNA
+            - alphamissense
+        gene_file: protein_coding_genes.parquet
+        use_common_variants: False
+        use_rare_variants: True
+        rare_embedding:
+            type: PaddedAnnotations 
+            config:
+                annotations:
+                    - CADD_raw
+                    - PrimateAI_score
+                    - sift_score
+                    - polyphen_score
+                    - SpliceAI_delta_score
+                    - AbSplice_DNA
+                    - alphamissense
+                thresholds:
+                    UKB_AF:  "UKB_AF < 1e-3 and UKB_AF > 0" #is updated automatically when updating the config with update_config
+                    # is_plof: "is_plof == 1"
+                gene_file: protein_coding_genes.parquet
+                verbose: True
+        verbose: True
+    dataloader_config:
+        num_workers: 10
