@@ -1,5 +1,5 @@
 comparison_results.parquet
-    - derived comparsion_results.pickle as obtained by ../association_tesing/comput_replication.py
+    - derived comparsion_results.pickle as obtained by ../figure2_association_testing_benchmark/comput_replication.py
     - needed because R cannot read pickle files
     with open('/home/e400p/ukbb/experiments/rvat/pretrained_models_more_phenotypes/comparison_results.pkl', 'rb') as f:
         comparison_results = pickle.load(f)

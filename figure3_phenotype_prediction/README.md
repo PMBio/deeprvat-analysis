@@ -25,7 +25,7 @@ The column names of `PRS.parquet` have to be the PGS ids and the index (named `s
 
 ### DeepRVAT gene impairment scores
 The folder `deeprvat_burdens` must have the `burdens.zarr` with the DeepRVAT gene impairment scores for all samples in `train_test_samples`. It also needs the metadata `sample_ids.zarr` and `genes.npy`, which provide the order of samples and genes in `burdens.zarr`. 
-The gene impairment scores are computed with the pre-trained models from `../association_testing/paper_experiment`, which only used unrelated Caucasian samples from the  UKBB 200k WES cohort during training. 
+The gene impairment scores are computed with the pre-trained models from `../figure2_association_testing_benchmark/deeprvat_main_exp`, which only used unrelated Caucasian samples from the  UKBB 200k WES cohort during training. 
 
 ### link to the reference experiment 
 The lists of genes whose gene impairment scores will  be included in the rare variant phenotype predictors are retrieved from the reference experiment `../association_testing/paper_experiment`. 

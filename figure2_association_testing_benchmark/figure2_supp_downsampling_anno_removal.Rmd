@@ -1,0 +1,399 @@
+---
+title: "DeepRVAT - Seed Genes Downsampled figures"
+author: "Eva Holtkamp"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+Load libraries
+
+```{r}
+library(ggplot2)
+library(arrow)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(latex2exp) 
+library(RColorBrewer)
+library(ggpubr)
+```
+
+```{r}
+source(file.path('../association_testing/rvat_figure_utils.R'))
+source(file.path('../phenotypes.R'))
+```
+
+```{r}
+phenotypes = old_quant_phenotypes
+num_exps = 5 
+```
+
+
+run run_deeprvat_reruns.sh, run_deeprvat_reruns.sh, run_pheno_downsample_folds.sh to get
+all experiment outputs required. 
+```{r}
+ref_exp_dir = '../association_testing/deeprvat_main_exp/'
+deeprvat_repeat_dir = "./deeprvat_reruns/"
+deeprvat_seed_gene_downs_dir =  "./seedgene_ds/"
+deeprvat_pheno_downs_dir = "./phenotype_ds/"
+deeprvat_feature_importance_dir = "../association_testing/"
+```
+
+
+
+# Combined analysis 
+
+## reference results
+```{r}
+results_list <- list()
+sig_list <- list()
+for (p in phenotypes) {
+  results_list[[p]] <- read_parquet(file.path(ref_exp_dir, p, "deeprvat", "eval", "all_results.parquet"))
+  sig_list[[p]] <- read_parquet(file.path(ref_exp_dir, p, "deeprvat", "eval", "significant.parquet"))
+}
+
+ref_pvals <- bind_rows(results_list) %>%
+    filter(Method == 'DeepRVAT')
+
+ref_pvals
+
+ref_sig <- bind_rows(sig_list) %>%
+    filter(Method == 'DeepRVAT')
+ref_sig %>% group_by(phenotype) %>%
+  summarize(size = n())
+
+ref_sig %>% distinct(phenotype)
+``` 
+
+
+## downsampled results
+```{r}
+readRepeatExperiments = function(downsampledsg_experiment_dir, num_exps = 5, exp_to_keep = NA,
+                                 repeat_str = "rep_"){
+  pval_all = tibble()
+  sig_all <- tibble()
+
+  if (all(is.na(exp_to_keep))) {
+    exp_to_keep <- seq(0, num_exps - 1)
+  } else {
+    exp_to_keep <- exp_to_keep
+  }
+  print(exp_to_keep)
+  for (i in exp_to_keep) {
+      print(i)
+      sg_set <- ifelse(is.na(repeat_str), '', paste(repeat_str, i, sep=""))
+      for (p in phenotypes) {
+          this_pval <- read_parquet(file.path(downsampledsg_experiment_dir, sg_set, p, "deeprvat", "eval", "all_results.parquet"))
+          this_pval = this_pval %>% mutate(set = i) %>% filter(Method == 'DeepRVAT')
+          pval_all = rbind(pval_all, this_pval)
+          
+          this_sig <- read_parquet(file.path(downsampledsg_experiment_dir, sg_set, p, "deeprvat", "eval", "significant.parquet"))
+          this_sig = this_sig %>% mutate(set = i) %>% filter(Method == 'DeepRVAT')
+          sig_all = rbind(sig_all, this_sig)
+          
+          
+      }
+  }
+  return(list(all_pvals = pval_all,
+         all_sig = sig_all))
+}
+
+
+
+```
+
+## deeprvat reruns
+
+```{r}
+res_da_reruns = readRepeatExperiments(deeprvat_repeat_dir)
+sig_da_reruns = res_da_reruns$all_sig
+pvals_da_reruns = res_da_reruns$all_pvals
+```
+
+## downsampling 
+```{r}
+res_seed_gene_sens = readRepeatExperiments(deeprvat_seed_gene_downs_dir)
+sig_seed_gene_sens = res_seed_gene_sens$all_sig
+pvals_seed_gene_sens = res_seed_gene_sens$all_pvals
+```
+
+```{r}
+res_pheno_sens = readRepeatExperiments(deeprvat_pheno_downs_dir)
+sig_pheno_sens = res_pheno_sens$all_sig
+pvals_pheno_sens = res_pheno_sens$all_pvals
+```
+
+
+```{r}
+res_list_downsampled = list('DeepRVAT-Trait downs.' = res_pheno_sens, 
+                            'DeepRVAT-Seed Gene downs.' = res_seed_gene_sens, 
+                            'DeepRVAT-Replicates' = res_da_reruns)
+
+
+```
+
+
+
+## Precision/discovery overlap
+
+
+```{r}
+compute_precision <- function(test, referene) {
+  set_test <- unique(test) 
+  set_reference <- unique(referene)
+  
+  intersection_size <- nrow(intersect(set_test, set_reference))
+
+  precision_in_reference <- intersection_size / nrow(set_reference)
+  
+  return(precision_in_reference)
+}
+```
+
+```{r}
+all_precision_across_pheno = tibble()
+for (key in names(res_list_downsampled)){
+  this_res = tibble()
+  for (i in seq(0, num_exps -1 )) {
+    print(i)
+    this_precision = compute_precision(res_list_downsampled[[key]][["all_sig"]] %>% filter(set ==i) %>% select(gene,phenotype),
+                          ref_sig %>% select(gene,phenotype))
+    res = tibble(precision = this_precision, set = i, key = key)
+    all_precision_across_pheno = rbind(all_precision_across_pheno, res)
+  }
+}
+precision_across_pheno_plot = all_precision_across_pheno %>% group_by(key) %>%
+  summarize(mean = mean(precision), std = sd(precision))
+precision_across_pheno_plot
+
+all_precision_across_pheno
+
+```
+
+
+
+```{r}
+all_plot_metrics_across_pheno = rbind(
+  precision_across_pheno_plot %>% mutate(metric = 'Precision')
+)
+
+all_precision_across_pheno = all_precision_across_pheno %>% mutate(metric = 'Precision') %>% 
+  rename(y = precision)
+```
+
+
+```{r}
+compar_methods = unique(all_plot_metrics_across_pheno[['key']])
+compar_methods = grep('DeepRVAT-', compar_methods,  value = TRUE, perl = TRUE)
+ref_methods = c() #, "STAAR", "Monti et al.")
+new_colors =  brewer.pal(length(compar_methods) , "Set2")
+names(new_colors) = compar_methods
+plot_colors = c(colors[ref_methods], new_colors)
+print(plot_colors)
+```
+
+
+```{r}
+metrics = c("Precision" = "Precision \n (Sig. Gene-Trait assoc. in reference exp.)")
+
+this_metric = "Precision"
+
+data = all_plot_metrics_across_pheno %>% filter(metric == this_metric)
+
+point_data = all_precision_across_pheno  %>% filter(metric == this_metric)
+
+p_metrics = ggplot() +
+  geom_col(data = data, aes(x = key, y = mean, fill = key), position='dodge',  width=0.9, linewidth=0.1) +
+  geom_errorbar(data = data, aes(x = key, y = mean, fill = key, 
+                                 ymin = mean - 2*std, ymax = mean + 2*std), width = 0.2, color = "black") +
+  geom_jitter(data = point_data, aes(x = key, y = y), size = 0.8) + 
+  labs(x = "", y = metrics[this_metric], fill = "") +
+  base_theme + 
+  scale_y_continuous(expand = expansion(mult = c(0, .1)),
+                     breaks = seq(0, 1, by = 0.1)) +
+  scale_fill_manual(values = plot_colors) +
+  theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        ) +
+  scale_fill_manual(values = plot_colors, breaks = names(plot_colors), limits = names(plot_colors), labels = names(plot_colors)) 
+
+
+p_metrics
+  
+
+```
+
+## significant gene-trait associations
+
+
+```{r}
+all_sig_combined = ref_sig %>% mutate(set = 0)
+for (key in names(res_list_downsampled)){
+  this_sig = res_list_downsampled[[key]][['all_sig']]
+  this_sig = this_sig %>% mutate(Method = key)
+  all_sig_combined = bind_rows(all_sig_combined, this_sig)
+}
+
+all_sig_counts = all_sig_combined %>% group_by(Method, set) %>%
+  summarize(n = n()) %>%
+  group_by(Method) %>%
+  summarize(std = sd(n), mean = mean(n))
+all_sig_counts
+
+all_sig_counts_per_set = all_sig_combined %>% group_by(Method, set) %>%
+  summarize(n = n()) 
+
+all_sig_counts_per_set
+
+```
+
+
+```{r}
+method_order = compar_methods
+method_order = c(compar_methods) #, c("DeepRVAT"))
+  
+
+p_assoc = ggplot() +
+  geom_col(data = all_sig_counts, aes(x = Method, y = mean, fill = Method), 
+           position='dodge', width=0.9, linewidth=0.1) +
+  geom_errorbar(data = all_sig_counts, aes(x = Method, y = mean, fill = Method, 
+                                           ymin = mean - 2*std, ymax = mean + 2*std), width = 0.2, color = "black") +
+  labs(x = "", y =  "Significant gene-trait associations") +
+  base_theme +
+  geom_jitter(data = all_sig_counts_per_set, aes(x = Method, y = n), size = 0.8) + 
+  scale_y_continuous(expand = expansion(mult = c(0, .1))) +
+  scale_fill_manual(values = plot_colors) +
+          
+  theme(
+    axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+        # axis.text.x=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
+        legend.position = 'top') +
+  labs(fill = '') +
+  scale_x_discrete(limits = method_order, breaks = method_order)
+
+p_assoc
+```
+
+
+# Feature removal
+
+
+```{r}
+exp_names = c("DeepRVAT \n w/o AlphaMissense" = "deeprvat_wo_alpha_missense", 
+              "DeepRVAT \n w/o Condel" = "deeprvat_wo_condel", 
+              "DeepRVAT \n w/o PrimateAi/PolyPhen2" = "deeprvat_wo_primateai_polyphen")
+
+all_sig_anno_removal = tibble()
+
+for (name in names(exp_names)) {
+  exp_dir = file.path(deeprvat_feature_importance_dir, exp_names[name])
+  this_res = readRepeatExperiments(exp_dir, num_exps = 1, repeat_str = NA)
+  all_sig_anno_removal = rbind(all_sig_anno_removal, this_res$all_sig %>% mutate(Method = name))
+}
+
+
+```
+
+
+```{r}
+new_methods = exp_names
+new_colors_anno_rm =  brewer.pal(length(new_methods) , "Set1")
+names(new_colors_anno_rm) = names(new_methods)
+plot_colors_anno_rm = c(colors['DeepRVAT'], new_colors_anno_rm)
+
+
+```
+
+```{r}
+all_sig_counts = rbind(all_sig_anno_removal %>% group_by(Method) %>% 
+  summarize(n = n()), 
+  all_sig_counts %>% filter(Method == "DeepRVAT") %>% select(Method, mean) %>% rename(n = mean))
+```
+
+```{r}
+method_order = c(names(new_methods), 'DeepRVAT')
+  
+
+p_assoc_anno_rm = ggplot(all_sig_counts %>% filter(Method %in% method_order), aes(x = Method, y = n, fill = Method)) +
+  geom_col(position='dodge', width=0.9, linewidth=0.1) +
+  labs(x = "", y =  "Significant gene-trait associations") +
+  base_theme + 
+  scale_y_continuous(expand = expansion(mult = c(0, .1))) +
+  scale_fill_manual(values = plot_colors_anno_rm)+ #, breaks = names(plot_colors_anno_rm), limits = names(plot_colors_anno_rm), labels = names(plot_colors_anno_rm), guide = 'none') +
+  theme(
+            # axis.text.x=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family),
+            axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+        legend.position = 'top') +
+  labs(fill = '') +
+  scale_x_discrete(limits = method_order, breaks = method_order)
+
+p_assoc_anno_rm
+```
+
+```{r}
+all_metric_anno_removal = tibble()
+
+for (key in unique(all_sig_anno_removal[['Method']])){
+  this_res = tibble()
+    print(i)
+  this_metric = compute_precision(all_sig_anno_removal %>% filter(Method ==  key) %>% select(gene,phenotype),
+                        ref_sig %>% select(gene,phenotype))
+  res = tibble(metric = this_metric, key = key)
+  all_metric_anno_removal = rbind(all_metric_anno_removal, res)
+  
+}
+all_metric_anno_removal_plot = all_metric_anno_removal %>% group_by(key) %>%
+  summarize(mean = mean(metric), std = sd(metric))
+# all_metric_anno_removal_plot = rbind(all_metric_anno_removal_plot, precision_across_pheno_plot %>% filter(key == 'DeepRVAT-Replicate'))
+```
+
+
+
+
+```{r}
+p_metric_anno_rm = ggplot(all_metric_anno_removal_plot %>% filter(key %in%method_order), 
+                     aes(x = key, y = mean, fill = key)) +
+    geom_col(position='dodge',  width=0.9, linewidth=0.1) +
+    geom_errorbar(aes(ymin = mean - std, ymax = mean + std), width = 0.2, color = "black") +
+    labs(x = "", y =metrics[["Precision"]], fill = "") +
+    base_theme +
+    scale_y_continuous(expand = expansion(mult = c(0, .1)),
+                       breaks = seq(0, 1, by = 0.1)) +
+    scale_fill_manual(values = plot_colors_anno_rm, breaks = names(plot_colors_anno_rm), limits = names(plot_colors_anno_rm), labels = names(plot_colors_anno_rm)) +
+    # theme(axis.text.x=element_text(angle=45, vjust=1, hjust=1, size = font_size, family = font_family)) #+
+    theme(
+      axis.text.x = element_blank(),
+          axis.ticks.x = element_blank()
+          )
+
+p_metric_anno_rm
+```
+
+
+
+```{r, eval = }
+my_margin = margin(0.5, 0.5, 0, 0.5, "cm")
+p = ggarrange(
+  ggarrange(p_metrics+  theme(plot.margin = my_margin) + theme(legend.text = element_text(size = title_font_size)),
+          p_assoc + theme(plot.margin = my_margin) + theme(legend.text = element_text(size = title_font_size)),
+          common.legend = TRUE, labels = c('a', 'b'), font.label = label_specs,ncol =2 , widths = c(0.52, 0.48), legend = 'right'),
+
+  ggarrange(p_metric_anno_rm  + theme(plot.margin =  my_margin) +  theme(legend.text = element_text(size = title_font_size )),
+                      p_assoc_anno_rm +   theme(plot.margin = my_margin)  + theme(legend.text = element_text(size = title_font_size)), 
+                      nrow = 1, widths = c(1*0.5, 1*0.5), align = 'h', common.legend = TRUE, labels = c('c', 'd'), font.label = label_specs, legend = 'right'),
+  nrow = 2
+)
+
+p
+width = 180
+height = width * 0.8
+ggsave(file.path(plot_dir, 'figure2_supp_downs_annos.png'), p, width = width , height = height, dpi = 600, units = "mm")
+ggsave(file.path(plot_dir, 'figure2_supp_downs_annos.pdf'), p, width = width , height = height, dpi = 600, units = "mm")
+
+```
+
+

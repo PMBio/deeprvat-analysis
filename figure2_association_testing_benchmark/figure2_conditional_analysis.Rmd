@@ -1,0 +1,310 @@
+
+# Analyse p-values of genes w/ wo correcting for common variants
+to get the results for the condtional analysis for qunatiative traits run https://github.com/PMBio/deeprvat/blob/main/pipelines/association_testing_control_for_common_variants.snakefile
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(arrow)
+library(latex2exp)
+library(ggpubr)
+```
+
+
+```{r}
+
+source(file.path('rvat_figure_utils.R'))
+source(file.path('../phenotypes.R'))
+```
+
+```{r}
+alpha = 0.05
+font_size = 14
+```
+
+```{r}
+
+exp_dir_da = './deeprvat_main_exp/'
+
+```
+
+```{r}
+phenotypes = setdiff(quant_phenotypes, 'WHR_Body_mass_index_BMI_corrected') #since this is a self defined phenotype, there was no GWAS avaialble and conditioning couldn't be run 
+print(length(phenotypes))
+```
+
+##Load p-values DeepRVAT conditional/unconditional 
+```{r}
+all_results = tibble()
+all_unconditional_results = tibble()
+for (pheno in phenotypes){
+  res_file_unconditional = file.path(exp_dir_da, pheno, 'deeprvat/eval/all_results.parquet')
+  res_file_conditional = file.path(exp_dir_da, pheno, '/deeprvat/average_regression_results/burden_associations_common_variant_corrected.parquet')
+
+  res_unconditional = read_parquet(res_file_unconditional) %>% filter(Method == 'DeepRVAT') %>%
+    mutate(group = 'unconditional') %>%
+    rename('Trait' = 'phenotype') %>%
+    mutate(phenotype = pheno)
+  
+  trait = res_unconditional %>% distinct(Trait) %>% pull(Trait)
+  
+  res_conditional = read_parquet(res_file_conditional) %>% mutate(group = 'conditional') %>% mutate(Trait = trait)
+  
+  n_genes = nrow(res_unconditional)
+  shared_cols = intersect(colnames(res_conditional), colnames(res_unconditional))
+  retested_genes = res_conditional[['gene']]
+  
+  all_results = bind_rows(all_results, res_unconditional %>% filter(gene %in% retested_genes))
+  all_results = bind_rows(all_results, res_conditional)
+  all_unconditional_results = rbind(all_unconditional_results, res_unconditional)
+}
+cols_to_keep = c("gene","pval","group","Trait")
+na_cond = all_results %>% filter(is.na(pval)) %>% select(gene, Trait) %>% mutate(remove_row = FALSE)
+all_results = all_results %>% select(all_of(cols_to_keep)) %>% 
+  left_join(na_cond) %>% 
+  filter(is.na(remove_row)) %>% select(-remove_row) 
+
+all_results = all_results %>% mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait))
+all_results %>% distinct(Trait)
+phenotype_renamer
+```
+
+
+
+## analyse 
+
+```{r}
+all_results_pivot = all_results %>% distinct() %>% pivot_wider(names_from = group, values_from = pval)
+
+```
+
+
+```{r}
+sig_threshold = 0.05 /n_genes
+all_results_pivot = all_results_pivot %>% 
+  mutate(ns_after_cond = ifelse(unconditional < sig_threshold & conditional > sig_threshold, TRUE, FALSE))
+
+p = ggplot(all_results_pivot , aes(x = -log10(unconditional), y = -log10(conditional), color = ns_after_cond)) +
+         geom_point() + 
+          geom_abline() +
+  theme_bw() + 
+  geom_hline(yintercept = -log10(sig_threshold), color = 'darkgrey', linetype = 'dashed') + 
+  geom_vline(xintercept = -log10(sig_threshold),color = 'darkgrey', linetype = 'dashed') + 
+  theme(aspect.ratio = 1)  + 
+  scale_color_manual(values=c('black', 'red'), name = 'Non-significant\nafter conditioning') + 
+  labs(x = TeX("$Unonditional -log_{10}(P)$"), y = TeX("$Conditional -log_{10}(P)$")) +
+  theme(
+      axis.title.x=element_text(size = font_size),
+      axis.title.y=element_text(size = font_size),
+
+      # axis.title.x=element_blank(),
+      legend.text = element_text(size = font_size),
+      legend.title = element_text(size = font_size),
+      legend.position = 'top'
+    )
+
+p
+```
+
+
+```{r}
+library(ggforce)
+
+
+p_pval_compr = p +
+  facet_zoom(xlim = c(5.4, 6.3), ylim = c(5.2,6.3), horizontal = TRUE, zoom.size = 0.5, show.area = FALSE) +
+  theme(aspect.ratio = 1)
+
+p_pval_compr
+
+```
+
+# zoom in to see points which get non-significant
+```{r}
+ggplot(all_results_pivot %>% filter(unconditional > 5e-7 & conditional > 5e-7) , aes(x = -log10(unconditional), y = -log10(conditional))) +
+         geom_point() + 
+          geom_abline() +
+  theme_bw() + 
+  geom_hline(yintercept = -log10(0.05 /n_genes), color = 'darkgrey', linetype = 'dashed') + 
+  geom_vline(xintercept = -log10(0.05 /n_genes),color = 'darkgrey', linetype = 'dashed') + 
+  theme(aspect.ratio = 1)  + 
+  labs(x = TeX("$Unonditional -log_{10}(P)$"), y = TeX("$Conditional -log_{10}(P)$"))
+```
+
+
+
+```{r}
+sig_counts = all_results %>% mutate(pval_corrected = pval * n_genes, significant = pval_corrected < alpha ) %>% 
+  drop_na() %>% group_by(Trait, group) %>%
+  summarize(n = sum(significant)) %>% ungroup()
+
+sig_counts %>% pivot_wider(names_from = group, values_from = n) %>%
+  mutate(diff = unconditional - conditional) %>% arrange(desc(diff))
+sig_counts %>% group_by(group) %>% summarize(sum(n))  
+
+
+sig_counts %>% pivot_wider(values_from = 'n', names_from = 'group') %>%
+  mutate(diff = conditional - unconditional) %>%
+  arrange(diff)
+paste(sig_counts %>% pivot_wider(values_from = 'n', names_from = 'group') %>%
+  mutate(diff = conditional - unconditional) %>%
+  arrange(diff) %>% filter(diff != 0) %>% pull(Trait), collapse = ', ')
+
+# 340/347 # remains significant
+340/349
+
+```
+
+
+
+
+### compare total counts to monti and staar
+
+
+```{r}
+pheno_names_to_keep =  unique(all_results[['Trait']])
+```
+
+```{r}
+counts_monti_quant = readRDS(file.path(monti_quant_dir, "monti_counts_all_phenotypes.Rds")) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) %>%
+  rename(n = discoveries) %>%
+  mutate(Method = 'Monti et al.') %>%
+  mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>%
+  filter(Trait %in% pheno_names_to_keep)
+
+
+all_traits_count = sum(counts_monti_quant %>% filter(is_single_trait == 'True') %>% pull(n))
+counts_monti_quant = counts_monti_quant %>% mutate(n = ifelse(Trait == 'All traits',all_traits_count, n))
+counts_monti_quant
+
+counts_staar_quant = readRDS(file.path(staar_quant_dir, "sig_counts_staar_all_phenotypes.Rds")) %>% 
+  mutate(Method = 'STAAR')  %>%
+  rename(n = discoveries) %>%
+  mutate(is_single_trait = ifelse(Trait == 'All traits', 'False', 'True')) %>%
+  mutate(Trait = ifelse(Trait %in% names(phenotype_renamer), phenotype_renamer[Trait], Trait)) %>%
+  filter(Trait %in% pheno_names_to_keep)
+
+all_traits_count = sum(counts_staar_quant %>% filter(is_single_trait == 'True') %>% pull(n))
+print(all_traits_count)
+counts_staar_quant = counts_staar_quant %>% mutate(n = ifelse(Trait == 'All traits',all_traits_count, n))
+
+```
+
+
+```{r}
+# Training phenotypes only 
+sum(sig_counts %>% filter(group == 'conditional' & Trait %in% names(old_quant_phenotypes)) %>% pull(n))
+sum(counts_staar_quant  %>% filter(Trait %in% names(old_quant_phenotypes)) %>% pull(n))
+sum(counts_monti_quant  %>% filter(Trait %in% names(old_quant_phenotypes)) %>% pull(n))
+
+all_trait_counts = bind_rows(sig_counts %>% filter(group == 'unconditional' ) %>% mutate(Method = 'DeepRVAT'),
+                          sig_counts %>% filter(group == 'conditional' ) %>% mutate(Method = 'DeepRVAT-Conditional'),
+                          counts_staar_quant,
+                          counts_monti_quant
+                          )
+comp = all_trait_counts %>% 
+  select(Method, Trait) %>% 
+  distinct() %>%
+  group_by(Method) %>%
+  summarize(n = n()) %>%
+  pull(n)
+
+
+all_trait_counts = all_trait_counts %>% mutate(pheno_group = ifelse(Trait %in% names(new_quant_phenotypes), 'New Trait', 'Training Trait')) 
+
+
+all_trait_counts %>%
+  select(pheno_group, Trait) %>% 
+  distinct() %>% 
+  group_by(pheno_group) %>%
+  summarize(size = n())
+
+
+
+all_trait_counts = all_trait_counts %>% 
+  group_by(pheno_group, Method) %>% 
+  summarize(n = sum(n))
+all_trait_counts
+all_trait_counts = all_trait_counts %>% mutate(Method = factor(Method, levels = c('Monti et al.', 'STAAR', 'DeepRVAT-Conditional', 'DeepRVAT')))
+all_trait_counts
+```
+
+
+
+
+```{r}
+
+all_trait_counts %>% 
+  group_by(Method) %>%
+  summarize(n = sum(n))
+```
+
+```{r}
+this_colors = colors
+this_colors[['DeepRVAT-Conditional']] = 'deeppink'
+p_discoveries = ggplot(
+    all_trait_counts,
+    aes(
+      x=pheno_group,
+      y=n,
+      fill=Method,
+    )
+  ) + 
+    geom_col(position='dodge', width=0.9, color='darkgray', linewidth=0.1) +
+    labs(y = "Significant gene-trait associations") +
+    theme_classic() +
+    # facet_grid(.~is_single_trait, scales='free', space = 'free') + #,  space = "free_x") +
+    # theme_cowplot() +
+    base_theme_wo_strip +
+    facet_wrap(vars(pheno_group), scales = 'free') + 
+    theme(
+      axis.text.x=element_text(size = font_size),
+      axis.title.y =element_text(size = font_size ),
+
+      # axis.title.x=element_blank(),
+      legend.key.size=unit(0.5, "line"),
+      legend.text = element_text(size = font_size ),
+      panel.spacing=unit(0.75, "cm"),
+      strip.background = element_blank(),
+      legend.position = 'top'
+    ) +
+    scale_fill_manual(values = this_colors) +
+    scale_y_continuous(expand = expansion(mult = c(0, .1))) +
+  labs(x = '')
+
+p_discoveries
+
+```
+
+
+```{r}
+label_size = 25
+label_specs = list(size = label_size, color = "black", face = "bold", family = NULL)
+p_out = ggarrange( p_pval_compr + theme(plot.margin = margin(1, 1, 1, 1, "cm")), p_discoveries, widths = c(0.6, 0.4),
+           labels = c('a', 'b'),  font.label = label_specs)
+# ggsave(file.path(plot_dir, 'plot_combined.png'),p_out,  dpi = 600,  height = 4, width = 14)
+p_out
+
+```
+
+```{r}
+label_size = 25
+label_specs = list(size = label_size, color = "black", face = "bold", family = NULL)
+p_out = ggarrange( p_pval_compr + theme(plot.margin = margin(1, 1, 1, 1, "cm")), 
+                   ggarrange(NA, p_discoveries, NA, widths = c(0.15, 0.7, 0.15), nrow = 1),
+           labels = c('a', 'b'),  font.label = label_specs, nrow = 2)
+ggsave(file.path(plot_dir, 'supp_fig2_conditional_analysis.png'),p_out,  dpi = 600,  height = 4, width = 14)
+
+
+```
+
+
+
+
+
+
+
+
+

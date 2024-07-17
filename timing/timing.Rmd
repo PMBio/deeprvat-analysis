@@ -19,7 +19,7 @@ The timing experiments were only run for a single phenotype (Triglycerides)
 timing_dir_staar = 'timing_staar'
 timing_dir_monti = 'timing_mont'
 timing_dir_seed_genes = 'timing_burden_skat'
-complete_seed_gene_experiment_dir = '../association_testing/burden_skat'
+complete_seed_gene_experiment_dir = '../figure2_association_testing_benchmark/burden_skat'
 deeprvat_train_time_res = 'timing_results.parquet'
 deeprvat_timing_dir = 'timing_deeprvat'
 
