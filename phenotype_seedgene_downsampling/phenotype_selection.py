@@ -17,18 +17,18 @@ logger = logging.getLogger(__name__)
 
 @click.command()
 @click.option("--exp_dir", type=click.Path(exists=True), default=".")
-@click.option("--folds", type=int, default= 0)
-@click.option("--downsample_percent", type=float, default= 0.1, help="Percentage of phenotypes to remove in each fold")
+@click.option("--reps", type=int, default= 0)
+@click.option("--downsample_percent", type=float, default= 0.1, help="Percentage of phenotypes to remove in each rep")
 def phenotype_selection(
     exp_dir: str,
-    folds: int,
+    reps: int,
     downsample_percent: float, 
 ):
     '''
     This script is used for running the phenotype-downsample analysis. 
     Works with the cv_split model setup.
     '''
-    logger.info(f"Downsampling Phenotype Selection Across Folds")
+    logger.info(f"Downsampling Phenotype Selection Across reps")
     logger.info(f"   Downsampling WITHOUT Replacement")
     rng = np.random.default_rng(seed=42)
 
@@ -68,31 +68,31 @@ def phenotype_selection(
     logger.info(f" Groups:\n{groups}")
 
     assert len(groups) == num_phenos_to_remove
-    assert len(groups['group_0']) >= folds, \
-            "Requested too many folds to sample-without-replacement for the total number of phenotypes."
+    assert len(groups['group_0']) >= reps, \
+            "Requested too many reps to sample-without-replacement for the total number of phenotypes."
     
-    hold_out = {f"set_{fold}" : [] for fold in range(folds)}
-    for fold in range(folds):
-        fold_select = groups
+    hold_out = {f"rep_{rep}" : [] for rep in range(reps)}
+    for rep in range(reps):
+        rep_select = groups
         
         with open(f'{exp_dir}/base/deeprvat_config.yaml','r') as f:
-            foldconfig = yaml.safe_load(f)
+            repconfig = yaml.safe_load(f)
 
         for i in range(num_phenos_to_remove):
-            remove_pheno = fold_select[f'group_{i}'][0][0] #always just select idx 0, as we shuffle each loop
+            remove_pheno = rep_select[f'group_{i}'][0][0] #always just select idx 0, as we shuffle each loop
 
-            foldconfig["training"]["phenotypes"].remove(remove_pheno)
-            hold_out[f"set_{fold}"].append(remove_pheno)
+            repconfig["training"]["phenotypes"].remove(remove_pheno)
+            hold_out[f"rep_{rep}"].append(remove_pheno)
 
             #Sample WITHOUT replacement
-            fold_select[f'group_{i}'].pop(0)
-            rng.shuffle(fold_select[f'group_{i}'])
+            rep_select[f'group_{i}'].pop(0)
+            rng.shuffle(rep_select[f'group_{i}'])
 
-        with open(f'{exp_dir}/set_{fold}/deeprvat_config.yaml', "w") as f:
-            yaml.dump(foldconfig, f) #save new set of training_phenotypes
+        with open(f'{exp_dir}/rep_{rep}/deeprvat_config.yaml', "w") as f:
+            yaml.dump(repconfig, f) #save new set of training_phenotypes
 
-        logger.info(f"   Fold {fold} complete:")
-        logger.info(f"      Held out phenotypes {hold_out[f'set_{fold}']}")
+        logger.info(f"   rep {rep} complete:")
+        logger.info(f"      Held out phenotypes {hold_out[f'rep_{rep}']}")
 
     with open(f'{exp_dir}/held_out_phenos.yaml', "w") as f:
         yaml.dump(hold_out, f)
