@@ -16,7 +16,7 @@ Consider the instructions for the [CV training](https://deeprvat.readthedocs.io/
 
 ## Run DeepRVAT experiments for supplementary figures
  
-For the subdirectories  `plof_missense_anno`, `linear_model`, with their association `config.yaml` files, run the  [DeepRVAT CV training/association testing pipeline](https://github.com/PMBio/deeprvat/blob/main/pipelines/cv_training/cv_training_association_testing.snakefile).
+For the subdirectories  `deeprvat_plof_missense_anno`, `deeprvat_linear_model`, with their association `config.yaml` files, run the  [DeepRVAT CV training/association testing pipeline](https://github.com/PMBio/deeprvat/blob/main/pipelines/cv_training/cv_training_association_testing.snakefile).
 
 
 ## Prepare additional data required for plotting
