@@ -13,11 +13,11 @@ mkdir experiment_dir
 cd ./experiment_dir
 
 mkdir -p ./base
-scp $deeprvat_dir/example/config.yaml ./base/config.yaml
+scp ../example_input_data_deeprvat/config.yaml ./base/config.yaml
 
 for rep in $(seq 0 $(($REPS - 1)) ); do
     mkdir -p ./phenotype_ds/rep_$rep
-    ln -s $deeprvat_dir/example/* ./phenotype_ds/rep_$rep/
+    ln -s ../example_input_data_deeprvat/* ./phenotype_ds/rep_$rep/
 done
 
 # RUN PHENOTYPE SELECTION ----------------------------------------------

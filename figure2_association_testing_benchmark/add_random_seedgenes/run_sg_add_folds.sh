@@ -13,11 +13,12 @@ mkdir experiment_dir
 cd ./experiment_dir
 
 mkdir -p ./base
-ln -s $deeprvat_dir/example/* ./base/
+ln -s ../example_input_data_deeprvat/* ./base/
+
 
 for rep in $(seq 0 $(($REPS - 1)) ); do
     mkdir -p ./sg_set_$rep
-    ln -s $deeprvat_dir/example/* ./sg_set_$rep/
+    ln -s ../example_input_data_deeprvat/* ./sg_set_$rep/
 done
 
 ## ------------- CV SPLIT Version -------------------------------------------

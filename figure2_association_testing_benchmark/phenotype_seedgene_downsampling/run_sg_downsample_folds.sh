@@ -13,11 +13,11 @@ mkdir experiment_dir
 cd ./experiment_dir
 
 mkdir -p ./base
-ln -s $deeprvat_dir/example/* ./base/
+ln -s ../example_input_data_deeprvat/* ./base/
 
 for rep in $(seq 0 $(($REPS - 1)) ); do
     mkdir -p ./seedgene_ds/rep_$rep
-    ln -s $deeprvat_dir/example/* ./seedgene_ds/rep_$rep/
+    ln -s ../example_input_data_deeprvat/* ./seedgene_ds/rep_$rep/
 done
 
 # RUN BASE CV EXP SEED GENE SELECTION W/ CONFIG RULE ------------------------------------------

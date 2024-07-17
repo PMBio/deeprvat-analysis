@@ -16,7 +16,7 @@ cd ./experiment_dir
 
 for rep in $(seq 0 $(($REPS - 1)) ); do
     mkdir -p ./rep_$rep
-    ln -s $deeprvat_dir/example/* ./deeprvat_reruns/rep_$rep/
+    ln -s ../example_input_data_deeprvat/* ./deeprvat_reruns/rep_$rep/
 done
 
 
