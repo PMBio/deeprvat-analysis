@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 @click.command()
 @click.option("--exp_dir", type=click.Path(exists=True), default=".")
-@click.option("--folds", type=int, default= 0, help="The number of different seed-gene setups, i.e. number of experiments each with a different set of added seed genes.")
-@click.option("--p_genes_random", type=float, default= 0.2, help="Percentage of total seed genes to randomly add to each Fold.")
+@click.option("--reps", type=int, default= 0, help="The number of different seed-gene setups, i.e. number of experiments each with a different set of added seed genes.")
+@click.option("--p_genes_random", type=float, default= 0.2, help="Percentage of total seed genes to randomly add to each rep.")
 @click.option("--max_pval", type=float, default= 0.5, help="Select only seed genes to add with pvals <= max_pval.")
 @click.option("--cv_splits", type=int, default= 5)
 def seed_gene_add_selection(
     exp_dir: str,
-    folds: int,
+    reps: int,
     p_genes_random: float, 
     max_pval: float,
     cv_splits: 5,
@@ -30,21 +30,21 @@ def seed_gene_add_selection(
     This script is used for running the add-random-seed-genes analysis. 
     Works with the cv_split model setup.
     '''
-    all_seed = {i : [] for i in range(folds)}
-    added_gene_pval = {i : [] for i in range(folds)}
+    all_seed = {i : [] for i in range(reps)}
+    added_gene_pval = {i : [] for i in range(reps)}
 
-    for idx in range(folds):
-        fold_dir = f'{exp_dir}/sg_set_{idx}'
-        print(fold_dir)
-        with open(f'{fold_dir}/deeprvat_config.yaml') as f:
+    for idx in range(reps):
+        rep_dir = f'{exp_dir}/sg_set_{idx}'
+        print(rep_dir)
+        with open(f'{rep_dir}/deeprvat_config.yaml') as f:
             config = yaml.safe_load(f)
         phenotypes = config["training"]["phenotypes"]
         print(f"Adding Seed Genes to the following phenotypes:{phenotypes}")
-        protein_coding_genes = pd.read_parquet(f'{fold_dir}/protein_coding_genes.parquet')
+        protein_coding_genes = pd.read_parquet(f'{rep_dir}/protein_coding_genes.parquet')
 
         for p in phenotypes: 
             print(p)
-            seed_gene_file = f'{fold_dir}/base/cv_split0/deeprvat/{p}/deeprvat/seed_genes.parquet'
+            seed_gene_file = f'{rep_dir}/base/cv_split0/deeprvat/{p}/deeprvat/seed_genes.parquet'
             this_seed = pd.read_parquet(seed_gene_file)
             if 'random_gene' in this_seed.columns:
                 this_seed = this_seed.query('random_gene == False')
@@ -54,7 +54,7 @@ def seed_gene_add_selection(
             print(f'number of random genes that will be sampled: {n_genes_random}')
 
             # get baseline p-values of all genes
-            this_base_file = f'{fold_dir}/base/baseline_results/{p}/eval/all_associations.parquet'
+            this_base_file = f'{rep_dir}/base/baseline_results/{p}/eval/all_associations.parquet'
             this_base = pd.read_parquet(this_base_file)
 
             #sample new genes
@@ -72,7 +72,7 @@ def seed_gene_add_selection(
             seed_combined = pd.concat([this_seed, seed_random]).assign(phenotype = p)
 
             for split in range(cv_splits):
-                seed_combined.to_parquet(f'{fold_dir}/cv_split{split}/deeprvat/{p}/deeprvat/seed_genes.parquet')
+                seed_combined.to_parquet(f'{rep_dir}/cv_split{split}/deeprvat/{p}/deeprvat/seed_genes.parquet')
 
             print(len(seed_combined))
             all_seed[idx].append(seed_combined)
