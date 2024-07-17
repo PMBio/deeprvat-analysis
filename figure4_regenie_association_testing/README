@@ -1,0 +1,8 @@
+# Instructions for reproducing results related to Figure. 2
+
+### This directory contains the code to reproduce all figures from the DeepRVAT association testing on the 470k UKBB cohort using REGENIE.
+
+
+The DeepRVAT model used to compute DeepRVAT gene impairment scores for all analyses in Figure 4 is the one trained in `deeprvat_main_exp`. 
+Follow the instructions from the main DeepRVAT instructions for using [DeepRVAT with REGENIE](https://deeprvat.readthedocs.io/en/latest/deeprvat.html#running-the-association-testing-pipeline-with-regenie) with precomputed gene impairment scores for quantiative and binary traits and on diverse subsets of samples. 
+For running the default REGENIE RVAT test (burden/SKAT) see the [REGENIE documentation](https://rgcgithub.github.io/regenie/). 
