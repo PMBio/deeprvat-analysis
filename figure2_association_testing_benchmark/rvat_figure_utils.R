@@ -15,7 +15,7 @@ binary_methods = c('SKAT missense',
                'DeepRVAT')
 
 
-
+plot_dir = './plots'
 
 font_size <- 10
 title_font_size = 12

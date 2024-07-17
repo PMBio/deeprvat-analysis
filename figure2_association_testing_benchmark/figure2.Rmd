@@ -28,20 +28,15 @@ source(file.path('../phenotypes.R'))
 
 ```{r}
 
-monti_quant_dir = ''  #directory where Monti has been run on unrelated Caucasian individuals from the 200k WES cohort
-staar_quant_dir = '' #directory where STAAR has been run on unrelated Caucasian individuals from the 200k WES cohort
-deeprvat_dir = "" #directory where DeepRVAT has been run on unrelated Caucasian individuals from the 200k WES cohort
+monti_quant_dir = '../comparison_methods/monti/experiments/monti/'  #directory where Monti has been run on unrelated Caucasian individuals from the 200k WES cohort
+staar_quant_dir = '../comparison_methods/staar/experiments/staar/' #directory where STAAR has been run on unrelated Caucasian individuals from the 200k WES cohort
+deeprvat_dir = "./deeprvat_main_exp/" #directory where DeepRVAT has been run on unrelated Caucasian individuals from the 200k WES cohort
 
-deeprvat_dir_syn = '' #directory where the DeepRVAT model from deeprvat_dir has been applied for association testing on synonymous variants only (unrelated Caucasian individuals from the 200k WES cohort) 
+deeprvat_dir_syn = './deeprvat_synonymous/' #directory where the DeepRVAT model from deeprvat_dir has been applied for association testing on synonymous variants only (unrelated Caucasian individuals from the 200k WES cohort) 
 
-timing_data_dir = '' #directory where the timing experiments have been run 
+timing_data_dir = '../timing/' #directory where the timing experiments have been run 
 
 scatter_data_dir = "" # DeepRVAT scores extracted for the plotted gene 
-```
-
-
-```{r}
-source('figure2_paths.R')
 ```
 
 
