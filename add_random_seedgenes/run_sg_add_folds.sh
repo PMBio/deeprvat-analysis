@@ -16,8 +16,8 @@ mkdir -p ./base
 ln -s $deeprvat_dir/example/* ./base/
 
 for fold in $(seq 0 $(($FOLDS - 1)) ); do
-    mkdir -p ./fold_$fold
-    ln -s $deeprvat_dir/example/* ./fold_$fold/
+    mkdir -p ./sg_set_$fold
+    ln -s $deeprvat_dir/example/* ./sg_set_$fold/
 done
 
 ## ------------- CV SPLIT Version -------------------------------------------

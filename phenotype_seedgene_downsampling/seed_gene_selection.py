@@ -125,7 +125,7 @@ def seed_gene_selection(
                 p.mkdir(parents=True,exist_ok=True)
 
                 if (pheno not in resample_phenos) or (sg_remove_dict[pheno][fold] == 0):
-                    seed_gene_df.to_parquet(f"./sg_set_{fold}/cv_split{split}/deeprvat/{pheno}/deeprvat/seed_genes.parquet", engine="pyarrow")
+                    seed_gene_df.to_parquet(f"{exp_dir}/sg_set_{fold}/cv_split{split}/deeprvat/{pheno}/deeprvat/seed_genes.parquet", engine="pyarrow")
                     logger.info(f"    sg_set{fold} cv_split{split} - {pheno}: No seed genes removed. Number seed genes = {len(seed_gene_df)}")
                 else:
                     logger.info(f"    sg_set{fold} cv_split{split} - {pheno}: Number of seed genes BEFORE selection = {len(seed_gene_df)}")

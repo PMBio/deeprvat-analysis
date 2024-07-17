@@ -16,8 +16,8 @@ mkdir -p ./base
 ln -s $deeprvat_dir/example/* ./base/
 
 for fold in $(seq 0 $(($FOLDS - 1)) ); do
-    mkdir -p ./fold_$fold
-    ln -s $deeprvat_dir/example/* ./fold_$fold/
+    mkdir -p ./sg_set_$fold
+    ln -s $deeprvat_dir/example/* ./sg_set_$fold/
 done
 
 # RUN BASE CV EXP SEED GENE SELECTION W/ CONFIG RULE ------------------------------------------
@@ -33,7 +33,7 @@ python $deeprvat_analysis_dir/phenotype_seedgene_downsampling/seed_gene_selectio
 for fold in $(seq 0 $(($FOLDS - 1)) ); do
     now="$(date)"
     echo "Starting Fold $fold: $now"
-    cd ./fold_$fold
+    cd ./sg_set_$fold
     snakemake -j 1 --snakefile $deeprvat_dir/pipelines/cv_training/cv_training_association_testing.snakefile --ri -n
     cd ../
     now="$(date)"

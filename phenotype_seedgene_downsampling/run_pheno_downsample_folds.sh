@@ -16,8 +16,8 @@ mkdir -p ./base
 scp $deeprvat_dir/example/config.yaml ./base/config.yaml
 
 for fold in $(seq 0 $(($FOLDS - 1)) ); do
-    mkdir -p ./fold_$fold
-    ln -s $deeprvat_dir/example/* ./fold_$fold/
+    mkdir -p ./set_$fold
+    ln -s $deeprvat_dir/example/* ./set_$fold/
 done
 
 # RUN PHENOTYPE SELECTION ----------------------------------------------
@@ -28,7 +28,7 @@ python $deeprvat_analysis_dir/phenotype_sensitivity/phenotype_selection.py --fol
 for fold in $(seq 0 $(($FOLDS - 1)) ); do
     now="$(date)"
     echo "Starting Fold $fold: $now"
-    cd ./fold_$fold
+    cd ./set_$fold
     snakemake -j 1 --snakefile $deeprvat_dir/pipelines/cv_training/cv_training_association_testing.snakefile -n
     cd ../
     now="$(date)"
