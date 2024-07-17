@@ -43,7 +43,7 @@ def phenotype_selection(
 
     pheno_seed_genes = {}
     for pheno in phenotypes:
-        seed_gene_df = pd.read_parquet(f'./{exp_dir}/base/cv_split0/deeprvat/{pheno}/deeprvat/seed_genes.parquet', engine="pyarrow")
+        seed_gene_df = pd.read_parquet(f'{exp_dir}/base/cv_split0/deeprvat/{pheno}/deeprvat/seed_genes.parquet', engine="pyarrow")
         pheno_seed_genes[pheno] = len(seed_gene_df)
 
         del seed_gene_df
