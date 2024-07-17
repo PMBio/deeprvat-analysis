@@ -155,7 +155,7 @@ training_data:
     variant_file: variants.parquet
     dataset_config:
         min_common_af:
-            combined_UKB_NFE_AF: 0.01
+            MAF: 0.01
         phenotype_file: phenotypes.parquet
         y_transformation: quantile_transform
         x_phenotypes:
@@ -185,8 +185,8 @@ training_data:
             - genetic_PC_20
         annotation_file: annotations.parquet
         annotations:
-            - combined_UKB_NFE_AF
-            - combined_UKB_NFE_AF_MB
+            - MAF
+            - MAF_MB
             - Consequence_splice_acceptor_variant
             - Consequence_splice_donor_variant
             - Consequence_stop_gained
@@ -201,7 +201,7 @@ training_data:
             type: PaddedAnnotations
             config:
                 annotations:
-                    - combined_UKB_NFE_AF_MB
+                    - MAF_MB
                     - Consequence_splice_acceptor_variant
                     - Consequence_splice_donor_variant
                     - Consequence_stop_gained
@@ -210,7 +210,7 @@ training_data:
                     - Consequence_start_lost
                     - Consequence_missense_variant
                 thresholds:
-                    combined_UKB_NFE_AF: "combined_UKB_NFE_AF < 1e-2"
+                    MAF: "MAF < 1e-2"
                     CADD_PHRED:  "CADD_PHRED > 5"
                 verbose: True
                 low_memory: True
@@ -224,7 +224,7 @@ data:
     variant_file: variants.parquet
     dataset_config:
         min_common_af:
-            combined_UKB_NFE_AF: 0.01
+            MAF: 0.01
         phenotype_file: phenotypes.parquet
         y_transformation: quantile_transform
         x_phenotypes:
@@ -254,8 +254,8 @@ data:
             - genetic_PC_20
         annotation_file: annotations.parquet
         annotations:
-            - combined_UKB_NFE_AF_MB
-            - combined_UKB_NFE_AF
+            - MAF_MB
+            - MAF
             - Consequence_splice_acceptor_variant
             - Consequence_splice_donor_variant
             - Consequence_stop_gained
@@ -271,7 +271,7 @@ data:
             type: PaddedAnnotations
             config:
                 annotations:
-                    - combined_UKB_NFE_AF_MB
+                    - MAF_MB
                     - Consequence_splice_acceptor_variant
                     - Consequence_splice_donor_variant
                     - Consequence_stop_gained
@@ -280,7 +280,7 @@ data:
                     - Consequence_start_lost
                     - Consequence_missense_variant
                 thresholds:
-                    combined_UKB_NFE_AF: "combined_UKB_NFE_AF < 1e-3"
+                    MAF: "MAF < 1e-3"
                     CADD_PHRED:  "CADD_PHRED > 5"
                 gene_file: protein_coding_genes.parquet
                 verbose: True

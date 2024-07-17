@@ -26,7 +26,7 @@ The folder `deeprvat_burdens` must have the `burdens.zarr` with the DeepRVAT gen
 The gene impairment scores are computed with the pre-trained models from `../figure2_association_testing_benchmark/deeprvat_main_exp`, which only used unrelated Caucasian samples from the  UKBB 200k WES cohort during training. 
 
 ### link to the reference experiment 
-The lists of genes whose gene impairment scores will be included in the rare variant phenotype predictors are retrieved from the reference experiment `../association_testing/paper_experiment`. 
+The lists of genes whose gene impairment scores will be included in the rare variant phenotype predictors are retrieved from the reference experiment `../figure2_association_testing_benchmark/deeprvat_main_exp`. 
 
 ### Alternative burden scores
 The code to retrieve burden scores from single variant annotations is provided in `alternative_burden_computation`. It extracts the max (min for SIFT) annotation score for each sample and gene. 

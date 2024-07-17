@@ -7,7 +7,7 @@ The association testing is only run on a random set of 1000 genes and compute ti
 
 
 For DeepRVAT, we only run the association testing here (`pretrained_models` have to be linked from `association_testing/paper_experiment`) using the [DeepRVAT association testing pipeline](https://github.com/PMBio/deeprvat/blob/main/pipelines/association_testing_pretrained.snakefile). 
-The DeepRVAT training and burden computation times have been retrieved from the log files after running the `association_testing/paper_experiment`. 
+The DeepRVAT training and burden computation times have been retrieved from the log files after running the `figure2_association_testing_benchmark/deeprvat_main_exp`. 
 
 
 

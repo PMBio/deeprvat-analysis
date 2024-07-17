@@ -15,8 +15,8 @@ data:
   dataset_config:
     annotation_file: annotations.parquet
     annotations:
-    - combined_UKB_NFE_AF
-    - combined_UKB_NFE_AF_MB
+    - MAF
+    - MAF_MB
     - CADD_PHRED
     - CADD_raw
     - sift_score
@@ -53,12 +53,12 @@ data:
     - alphamissense
     gene_file: protein_coding_genes.parquet
     min_common_af:
-      combined_UKB_NFE_AF: 0.01
+      MAF: 0.01
     phenotype_file: phenotypes.parquet
     rare_embedding:
       config:
         annotations:
-        - combined_UKB_NFE_AF_MB
+        - MAF_MB
         - CADD_raw
         - sift_score
         - polyphen_score
@@ -96,7 +96,7 @@ data:
         low_memory: true
         thresholds:
           CADD_PHRED: CADD_PHRED > 5
-          combined_UKB_NFE_AF: combined_UKB_NFE_AF < 1e-3
+          MAF: MAF < 1e-3
         verbose: true
       type: PaddedAnnotations
     sample_file: samples.pkl
@@ -343,8 +343,8 @@ training_data:
   dataset_config:
     annotation_file: annotations.parquet
     annotations:
-    - combined_UKB_NFE_AF
-    - combined_UKB_NFE_AF_MB
+    - MAF
+    - MAF_MB
     - CADD_PHRED
     - CADD_raw
     - sift_score
@@ -380,12 +380,12 @@ training_data:
     - SpliceAI_delta_score
     - alphamissense
     min_common_af:
-      combined_UKB_NFE_AF: 0.01
+      MAF: 0.01
     phenotype_file: phenotypes.parquet
     rare_embedding:
       config:
         annotations:
-        - combined_UKB_NFE_AF_MB
+        - MAF_MB
         - CADD_raw
         - sift_score
         - polyphen_score
@@ -422,7 +422,7 @@ training_data:
         low_memory: true
         thresholds:
           CADD_PHRED: CADD_PHRED > 5
-          combined_UKB_NFE_AF: combined_UKB_NFE_AF < 1e-2
+          MAF: MAF < 1e-2
         verbose: true
       type: PaddedAnnotations
     sample_file: samples.pkl

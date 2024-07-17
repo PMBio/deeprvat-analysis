@@ -21,7 +21,7 @@ The `annotations.parquet` should have the follwowing columns:
 | gene_ids    | gene id of the gene the variant is assigned to (as in `genes.parquet`|
 | chrom    | chromosome   |
 | pos   | variant position   |
-| combined_UKB_NFE_AF   | variant MAF (Maximum of the MAF in the UK Biobank cohort and in gnomAD release 3.0 (non-Finnish European population)    |
+| MAF   | variant MAF (Maximum of the MAF in the UK Biobank cohort and in gnomAD release 3.0 (non-Finnish European population)    |
 | is_plof    | Binary indicator. 1 if any VEP consquence out of  splice_acceptor_variant, splice_donor_variant, frameshift_variant, stop_gained, stop_lost, start_lost is True  |
 | Consequence_missense_variant    | VEP annoation    |
 | missense_or_plof    | variant is annotated with `is_plof` or `Consequence_missense_variant` or both    | 

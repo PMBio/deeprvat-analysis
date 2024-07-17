@@ -56,7 +56,7 @@ data:
     variant_file: variants.parquet
     dataset_config:
         min_common_af:
-            combined_UKB_NFE_AF: 0.01
+            MAF: 0.01
         phenotype_file: phenotypes.parquet
         y_transformation: quantile_transform
         x_phenotypes:
@@ -84,8 +84,8 @@ data:
             - genetic_PC_20
         annotation_file: annotations.parquet
         annotations:
-            - combined_UKB_NFE_AF
-            - combined_UKB_NFE_AF_MB
+            - MAF
+            - MAF_MB
             - CADD_PHRED
             - CADD_raw
             - sift_score
@@ -126,7 +126,7 @@ data:
             type: PaddedAnnotations
             config:
                 annotations:
-                    - combined_UKB_NFE_AF_MB
+                    - MAF_MB
                     - CADD_raw
                     - sift_score
                     - polyphen_score
@@ -160,7 +160,7 @@ data:
                     - DeepRipe_plus_QKI_parclip
                     - SpliceAI_delta_score
                 thresholds:
-                    combined_UKB_NFE_AF: "combined_UKB_NFE_AF < 1e-3"
+                    MAF: "MAF < 1e-3"
                     CADD_PHRED:  "CADD_PHRED > 5"
                 gene_file: timing_genes.parquet
                 verbose: True
