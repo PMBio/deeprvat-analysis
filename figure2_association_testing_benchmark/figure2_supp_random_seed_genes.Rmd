@@ -1,0 +1,334 @@
+---
+title: "DeepRVAT - Including random seed genes during training"
+author: "Eva Holtkamp"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+```{r}
+library(arrow)
+library(tibble)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(cowplot)
+library(ggpubr)
+library(latex2exp)
+theme_set(theme_cowplot())
+
+```
+
+# Show empirically that testing with DeepRVAT is calibrated
+
+
+```{r}
+source(file.path('../association_testing/rvat_figure_utils.R'))
+source(file.path('../phenotypes.R'))
+```
+
+
+```{r}
+phenotypes = old_quant_phenotypes
+assertthat::assert_that(length(phenotypes) == 21)
+```
+
+
+```{r}
+ref_dir = '../association_testing/deeprvat_main_exp/'
+random_exp_dirs = list('20%'= './')
+
+```
+
+
+```{r}
+
+get_raw_results <- function(base_dir, rank = FALSE) {
+  all_res <- tibble()
+  all_res <- read_parquet(sprintf('%s/deeprvat/eval/all_results.parquet', base_dir)) %>%
+      select(-`__index_level_0__`)
+
+  if (rank) {
+    all_res <- all_res %>%
+      filter(Method == 'DeepRVAT') %>%
+      arrange(pval) %>%
+      mutate(rank = row_number()) 
+  }
+  
+  return(all_res)
+}
+
+get_pvals_random_genes = function(exp_dir, exp_name = NA,
+                                  genes_to_return = 'random_seed',
+                                  seed_gene_dir){
+  all_rand_pvals = tibble()
+   
+
+  print(sprintf('returning pvals for genes %s', genes_to_return))
+    
+  for (p in phenotypes){
+    seed_gene_file <- sprintf('%s/%s/deeprvat/seed_genes.parquet', seed_gene_dir, p)
+    this_seed <- read_parquet(seed_gene_file)
+    if ("random_gene" %in% colnames(this_seed)){
+      this_random_seed_ids <- this_seed %>% filter(random_gene) %>% pull(id)
+      this_non_random_seed_ids  <- this_seed %>% filter(random_gene == FALSE) %>% pull(id)
+    }else{
+      print('random_seed column not in seed genes')
+      this_random_seed_ids = NA
+      this_non_random_seed_ids  <- this_seed %>% pull(id)
+    }
+    
+    this_res_exp <- get_raw_results(sprintf('%s/%s', exp_dir, p))
+    this_res_ref <- get_raw_results(sprintf('%s/%s', ref_dir, p))
+
+    combined_res = bind_rows(list(ref=this_res_ref, random=this_res_exp), .id = 'source')
+    if ("random_gene" %in% colnames(this_seed)){
+      gene_map = combined_res %>% select(gene) %>% distinct() %>% left_join(
+        this_seed %>% select(id, random_gene) %>% rename(gene = id) %>%
+        mutate(gene_type = ifelse(random_gene, 'random_seed', 'real_seed')) %>% select(gene, gene_type)) %>%
+        mutate(gene_type = ifelse(is.na(gene_type), 'non_seed_gene', gene_type))
+    }else{
+       gene_map = combined_res %>% select(gene) %>% distinct() %>% left_join(
+        this_seed %>% select(id) %>% rename(gene = id) %>%
+        mutate(gene_type = 'real_seed') %>% select(gene, gene_type)) %>%
+        mutate(gene_type = ifelse(is.na(gene_type), 'non_seed_gene', gene_type))
+    }
+      
+      
+    if (genes_to_return == 'random_seed'){
+      # print('returning pvals for random seed genes only')
+      combined_res = combined_res %>% filter(gene %in% this_random_seed_ids)
+    }else if(genes_to_return == 'all_seed'){
+      combined_res = combined_res %>% filter(gene %in% union(this_random_seed_ids, this_non_random_seed_ids)) 
+    }else{
+      # print('returning pvals for all genes')
+      combined_res = combined_res %>%
+        mutate(random_gene = ifelse(gene %in% this_random_seed_ids, TRUE, FALSE))
+    }
+    combined_res = combined_res %>%
+        mutate(random_gene = ifelse(gene %in% this_random_seed_ids, TRUE, FALSE)) %>%
+        left_join(gene_map)
+    all_rand_pvals = rbind(all_rand_pvals, combined_res)
+  }
+  exp_name = ifelse(is.na(exp_name), exp_dir, exp_name)
+  return(all_rand_pvals  %>% 
+      mutate(exp = exp_name))
+}
+
+
+```
+
+
+
+
+```{r}
+
+readPvalsAllReplicates = function(random_exp_dir,
+                                  set_ids = c(0,1,2,3,4),
+                                  genes_to_return = 'random_seed'){
+   combined_res = tibble()
+   for (set_id in set_ids){
+        print(set_id)
+        set_name = sprintf('sg_set_%s', set_id)
+        res = get_pvals_random_genes(
+                exp_dir = file.path(random_exp_dir, set_name),
+                exp_name = NA,
+                seed_gene_dir = file.path(random_exp_dir, set_name, 'cv_split0/deeprvat/'),
+                genes_to_return = genes_to_return
+              ) 
+        res = res %>% mutate(set = set_name)
+        combined_res = rbind(combined_res, res)
+   }
+  return(combined_res)
+}
+
+
+all_rand_pvals = tibble()
+for (key in names(random_exp_dirs)){
+  random_exp_dir = random_exp_dirs[[key]]
+
+  this_res = readPvalsAllReplicates(random_exp_dir, set_ids = seq(0,4)) %>%
+    mutate(perc_random = key)
+  
+  all_rand_pvals = rbind(all_rand_pvals, this_res)
+  
+}
+
+
+```
+
+
+```{r}
+n_genes = nrow(get_raw_results(sprintf('%s/%s', ref_dir, "HDL_cholesterol")))
+```
+
+```{r}
+plot_df_ref_vs_random = all_rand_pvals %>% 
+  filter(Method == 'DeepRVAT') %>% 
+  select(phenotype,gene, pval, exp, source, gene_type, set) %>%
+  pivot_wider(names_from = source, values_from = pval)  %>%
+  filter(gene_type == 'random_seed')
+  
+
+plot_df_ref_vs_random
+
+all_rand_pvals %>% filter(pval < 10e-6)
+```
+
+
+
+```{r}
+val_0 = 2
+val_1 = 1
+```
+
+
+```{r}
+
+plot_df_ref_vs_random_counts = plot_df_ref_vs_random %>% 
+  filter(gene_type == 'random_seed') %>% 
+  # group_by(group, exp) %>% 
+  rename(x = ref, y = random) %>%
+  summarize(x_bigger_y = sum(x > y),
+            x_smaller_y = sum(x < y )) %>% 
+  pivot_longer(cols = c('x_bigger_y', 'x_smaller_y')) %>%
+  mutate(xpos = ifelse(name == 'x_bigger_y', val_1, val_0),
+         ypos = ifelse(name == 'x_bigger_y', val_0, val_1))
+
+x_y_labs =   labs(x = paste(TeX("$-log_{10}(P)$"), "Not included as seed gene", sep = '\n'), 
+                            y = paste(TeX("$-log_{10}(P)$"), "Included as seed gene", sep = '\n'))
+x_y_labs =   labs(x = TeX("$-log_{10}(P)$ - Included as seed gene"), y = TeX("$-log_{10}(P)$ - Not included as seed gene"),
+                  title = 'Null gene p-values' )
+
+ggplot(plot_df_ref_vs_random %>% 
+  filter(gene_type == 'random_seed'), aes(x = ref, y = random )) +
+  geom_point()+
+  theme(aspect.ratio = 1) +
+  geom_abline(slope=1, intercept = 0) +
+  geom_text(data = plot_df_ref_vs_random_counts, aes(x = xpos, y = ypos, label = sprintf('n = %d', value)), color = 'red') 
+
+pval_compar = ggplot(plot_df_ref_vs_random %>% filter(ref > 10e-6) %>%
+  filter(gene_type == 'random_seed'), aes(x = -log10(ref), y = -log10(random))) +
+  geom_point()+
+  base_theme +
+  theme(aspect.ratio = 1#, 
+        #axis.title = element_text(size = 12)
+        ) +
+  geom_abline(slope=1, intercept = 0) +
+  geom_text(data = plot_df_ref_vs_random_counts %>% rename(xpos = ypos, ypos = xpos) , aes(x = xpos+0.8, y = ypos + 0.8, label = sprintf('n = %d', value)), color = 'red', size = 2.5) +
+  x_y_labs
+
+pval_compar
+```
+
+
+## QQ-Plot
+```{r}
+makeQQPlot = function(df, plot_colors, subsample_data = TRUE, 
+                      color_col = 'Method',
+                      grouping_cols = c(Method, trait_group)){
+  df = df %>%
+    group_by(across(all_of(grouping_cols))) %>%
+    arrange(pval) %>%
+    mutate(`-log10pval_expected` = -log10(1:n() / n())) %>%
+    ungroup()
+
+  # Check if '-log10pval' column exists, if not, add it
+  if (!('-log10pval' %in% colnames(df))) {
+    df <- df %>%
+      mutate(`-log10pval` = -log10(pval))
+  }
+  sample_data <- function(df) {
+    df %>%
+      group_by(across(all_of(grouping_cols))) %>%
+      mutate(sample_percent = ifelse(`-log10pval_expected` < 2, 0.10, 0.5)) %>%
+      filter(runif(n()) < sample_percent)
+  }
+
+  # Sample the data --> Comment this in if you want to make the qqplot plotting faster
+  if (subsample_data){
+    df_sub <- df %>%
+      sample_data()
+  }else{
+    df_sub = df
+  }
+  nrow(df)
+  #show all values > max_val as triangles
+  max_val_binary = 30
+  max_val_quantitative = 50
+  
+  df_sub <- df_sub %>%
+    mutate(
+      shape = case_when(
+        trait_group == 'Binary' &  `-log10pval` > max_val_binary ~ 'triangle',
+        trait_group == 'Binary' &  `-log10pval` <= max_val_binary ~ 'circle',
+        trait_group == 'Quantitative' &  `-log10pval` > max_val_quantitative ~ 'triangle',
+        trait_group == 'Quantitative' &  `-log10pval` <= max_val_quantitative ~ 'circle',
+        TRUE ~ NA_character_
+      ),
+       `-log10pval` = case_when(
+        (trait_group == 'Binary' &  `-log10pval` > max_val_binary) |
+        (trait_group == 'Quantitative' &  `-log10pval` > max_val_quantitative) ~ max_val_quantitative,
+        TRUE ~  `-log10pval`
+      )
+    ) %>%
+    mutate(alpha = ifelse(`-log10pval_expected` < 4, 'alpha_low', 'alpha_high'))
+   
+   max_y = ifelse(grepl("Quantiative", df_sub[['trait_group']]), 
+                        max_val_quantitative, 
+                        max_val_binary)
+   max_y = min(max(df_sub[["-log10pval"]]), max_y)
+       
+   color_limits = intersect(unique(df[[color_col]]), names(plot_colors))
+   color_names = gsub('\\+', '+\n',color_limits)
+   
+   qq_p = ggplot(df_sub, aes(x = `-log10pval_expected`, 
+                             y = `-log10pval`, color = !!sym(color_col),
+                             fill =  !!sym(color_col), 
+                             shape = shape, size = shape)) +
+        labs(x = TeX("$Expected -log_{10}(P)$"), y = TeX("$Observed -log_{10}(P)$")) +
+        geom_abline(intercept = 0, slope = 1, color = 'darkgrey') +
+        geom_point() +
+        ylim(0, max_y) +
+        base_theme_wo_margin +
+        scale_color_manual(values = plot_colors, labels = color_names, limits = color_limits) +
+        scale_fill_manual(values = plot_colors, guide = 'none') +
+        scale_shape_manual(values = c('triangle' = 17,'circle' = 19), guide = 'none') +
+        scale_size_manual(values = c('triangle' = 1.5,'circle' = 0.5), guide = 'none')  
+   return(qq_p)
+}
+```
+
+
+
+
+```{r}
+
+qq_df = all_rand_pvals %>% mutate(trait_group = 'Quantitative') 
+qq_colors = c('random' = "darkblue", ref = "lightblue")
+qq_colors_names =  c('random' = "Included as seed gene", ref = "Not included as seed gene")
+qq_df
+qq_null = makeQQPlot(qq_df %>% filter(gene_type == 'random_seed'), plot_colors = qq_colors, color_col = 'source', 
+           grouping_cols = c('source', 'trait_group'), subsample = FALSE) +
+  theme(aspect.ratio = 1,
+        legend.position = c(0.2, 0.8)) +
+  geom_point(size = 1) +
+  scale_color_manual(values = qq_colors, breaks = names(qq_colors), limits = names(qq_colors), labels = qq_colors_names) 
+
+
+qq_null
+
+```
+
+
+```{r}
+width = 180
+p = ggarrange(pval_compar + labs(title = ''),
+              qq_null+ theme(legend.text = element_text(size = title_font_size)),NA,nrow = 1, 
+              # labels = c('a', 'b', ''),font.label = label_specs, 
+              widths = c(0.4, 0.4, 0.2))
+ggsave(file.path(plot_dir, 'figure2_supp_random_seeds.png'), p,
+        width = width , height = 0.45*width, units = 'mm', dpi = 600)
+```
+

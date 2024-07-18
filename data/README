@@ -1,8 +1,8 @@
 comparison_results.parquet
-    - derived comparsion_results.pickle as obtained by ../association_tesing/comput_replication.py
+    - derived comparsion_results.pickle as obtained by ../figure2_association_testing_benchmark/comput_replication.py
     - needed because R cannot read pickle files
-    with open('/home/e400p/ukbb/experiments/rvat/pretrained_models_more_phenotypes/comparison_results.pkl', 'rb') as f:
+    with open('/path/to/exp/comparison_results.pkl', 'rb') as f:
         comparison_results = pickle.load(f)
     df = pd.DataFrame([(key, value) for key, values in comparison_results.items() for value in values], columns=['phenotype', 'gene'])
     df['phenotype'] = [name.replace(' ', '_') for name in df['phenotype']]
-    df.to_parquet('/home/e400p/deeprvat_public/deeprvat-analysis/data/comparison_results.parquet')
+    df.to_parquet('/path/to/deeprvat-analysis/data/comparison_results.parquet')

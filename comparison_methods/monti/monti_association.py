@@ -571,7 +571,7 @@ def _add_annotation_cols(annotations, config):
 @click.option("--phenotype", type=str)
 @click.option("--variant-type", type=str)
 @click.option("--rare-maf", type=float)
-@click.option("--maf-column", type=str, default="combined_UKB_NFE_AF")
+@click.option("--maf-column", type=str, default="MAF")
 @click.option("--simulated-phenotype-file", type=str)
 @click.argument("old_config_file", type=click.Path(exists=True))
 @click.argument("new_config_file", type=click.Path())

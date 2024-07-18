@@ -1,0 +1,45 @@
+
+```{r}
+require(arrow)
+require(ggplot2)
+require(dplyr)
+```
+
+```{r}
+source("../figure2_association_testing_benchmark/rvat_figure_utils.R")
+
+```
+
+```{r}
+scores = read_parquet("burdens_with_has_known.parquet")
+scores
+
+
+p = ggplot(
+  scores %>% 
+    # filter(abs(ASXL1 - median(ASXL1)) > 0.0001) %>%
+    arrange(ASXL1) %>%
+    mutate(rank = row_number()) %>%
+    filter (rank > max(rank) - 1000) %>%
+    rename(`DeepRVAT score for ASXL1` = ASXL1, `Participant has known variant` = has_known_variant, `DeepRVAT score rank` = rank),
+  aes(x = `DeepRVAT score rank`, y = `DeepRVAT score for ASXL1`, color = `Participant has known variant`, alpha = 0.5)
+  ) +
+  geom_point(alpha = 0.5) +
+  theme_classic() +
+  base_theme +
+  theme(legend.text = element_text(size = title_font_size),
+        legend.title = element_text(size = title_font_size))
+
+p
+p = ggarrange(NA, p, NA, widths = c(0.13, 0.74, 0.13), nrow = 1)
+ggsave(file.path(plot_dir, "asxl_scores.png"), dpi = 600, width = width, height = 0.5 * width,
+       units = 'mm')
+
+```
+
+```{r}
+scores
+scores %>% 
+    filter(abs(ASXL1 - median(ASXL1)) > 0.0001)
+```
+

@@ -17,7 +17,7 @@ The experiment directory in addition requires to have the same input data as spe
 
 
 ### Varaint annotations
-As for the DeepRVAT input, the  `annotations.parquet` should have the variant id (`id`) as the index, and the columns `gene_ids` and `combined_UKB_NFE_AF`
+As for the DeepRVAT input, the  `annotations.parquet` should have the variant id (`id`) as the index, and the columns `gene_ids` and `MAF`
 
 Also, the PHRED score for all continuous annotations used with DeepRVAT have to be provided (`−10 × log10(rank(−score_a)/M)`, where M is total number of variants sequenced across the whole genome and the ranking is done for each annotation `a` seperately)
 - CADD_PHRED

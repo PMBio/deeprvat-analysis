@@ -19,7 +19,7 @@ The timing experiments were only run for a single phenotype (Triglycerides)
 timing_dir_staar = 'timing_staar'
 timing_dir_monti = 'timing_mont'
 timing_dir_seed_genes = 'timing_burden_skat'
-complete_seed_gene_experiment_dir = '../association_testing/burden_skat'
+complete_seed_gene_experiment_dir = '../figure2_association_testing_benchmark/burden_skat'
 deeprvat_train_time_res = 'timing_results.parquet'
 deeprvat_timing_dir = 'timing_deeprvat'
 
@@ -248,7 +248,6 @@ training_time_deeprvat
 ```
 
 
-```{r}
 n_cv_splits = 5
 n_repeats = 6 # number of ensembled DeepRVAT models per split
 
@@ -475,7 +474,8 @@ this_df_x_fold
 
 
 ```{r}
-n_phenotypes = 34 
+n_phenotypes = 34
+
 all_times_multipheno = tibble()
 n_genes = 20000 # considers 20k protein coding genes
 for (mode in  c('time_complete', 'time_test')){
@@ -501,8 +501,8 @@ this_df[['Method']] = sapply(this_df[['Method']], deeprvat_name_renamer)
 
 this_df_x_fold = this_df %>%
   mutate(ref_value = this_df[['time']][this_df[['Method']] == 'DeepRVAT (pre-trained)']) %>%
-  mutate(time_x = time/ref_value, time_h = round(time/(3600*24), 1)) %>%
-  mutate(time_x_val = paste0(round(time_x,0), 'x \n (', time_h, ' d)' ))
+  mutate(time_x = time/ref_value, time_d = round(time/(3600*24), 1)) %>%
+  mutate(time_x_val = paste0(round(time_x,0), 'x \n (', time_d, ' d)' ))
 this_df_x_fold
 
 saveRDS(this_df_x_fold,'timing_data_x_fold_34_pheno.Rds') #to use for plotting of the main figure

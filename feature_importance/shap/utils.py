@@ -47,7 +47,7 @@ QUANT_COLOR_LIST =  ['#3182bd', '#6baed6',
 # '#8370ab'  splicing 
 
 
-ANNOTATION_NAMES = ['combined_UKB_NFE_AF_MB', 'CADD_raw',
+ANNOTATION_NAMES = ['MAF_MB', 'CADD_raw',
          'sift_score', 'polyphen_score',
          'Consequence_splice_acceptor_variant', 'Consequence_splice_donor_variant',
          'Consequence_stop_gained', 'Consequence_frameshift_variant',
@@ -85,7 +85,7 @@ BINARY_ANNOTATION_CATEGORIES = {
                         }
 
 
-ANNOTATION_CATEGORIES = { 'combined_UKB_NFE_AF_MB': 'UKB MAF',
+ANNOTATION_CATEGORIES = { 'MAF_MB': 'UKB MAF',
                           'CADD_raw': 'CADD raw',
                           'DeepSEA_PC_1': 'BHLHE40',
                           'DeepSEA_PC_2': 'CTCF',
@@ -131,7 +131,7 @@ ANNOTATION_CATEGORIES = { 'combined_UKB_NFE_AF_MB': 'UKB MAF',
 
 
 
-ANNOTATION_CODES = {      'combined_UKB_NFE_AF_MB': 1,
+ANNOTATION_CODES = {      'MAF_MB': 1,
                           'CADD_raw': 2,
                           'DeepSEA_PC_1': 3,
                           'DeepSEA_PC_2': 4,
@@ -175,7 +175,7 @@ ANNOTATION_CODES = {      'combined_UKB_NFE_AF_MB': 1,
 
 
 
-ANNOTATION_PRINT = { 'combined_UKB_NFE_AF_MB': 'UKB MAF',
+ANNOTATION_PRINT = { 'MAF_MB': 'UKB MAF',
                           'CADD_raw': 'CADD raw',
                           'DeepSEA_PC_1': 'BHLHE40',
                           'DeepSEA_PC_2': 'CTCF',
